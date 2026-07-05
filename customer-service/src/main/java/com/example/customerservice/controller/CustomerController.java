@@ -3,6 +3,7 @@ package com.example.customerservice.controller;
 import com.example.customerservice.dto.CreateCustomerRequest;
 import com.example.customerservice.dto.CustomerInternalResponse;
 import com.example.customerservice.dto.CustomerResponse;
+import com.example.customerservice.security.PermissionConstants;
 import com.example.customerservice.service.CustomerService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -21,7 +22,7 @@ public class CustomerController {
     }
 
     @GetMapping("/me")
-    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    @PreAuthorize(PermissionConstants.HAS_ROLE_USER_OR_ADMIN)
     public CustomerResponse getCurrentCustomer(Authentication authentication) {
         return customerService.getCustomerByEmail(authentication.getName());
     }
@@ -37,13 +38,13 @@ public class CustomerController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize(PermissionConstants.HAS_ROLE_ADMIN)
     public List<CustomerResponse> getAllCustomers() {
         return customerService.getAllCustomers();
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize(PermissionConstants.HAS_ROLE_ADMIN)
     public CustomerResponse getCustomerById(@PathVariable Long id) {
         return customerService.getCustomerById(id);
     }
