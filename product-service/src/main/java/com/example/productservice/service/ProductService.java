@@ -3,6 +3,7 @@ package com.example.productservice.service;
 import com.example.productservice.document.Product;
 import com.example.productservice.dto.CreateProductRequest;
 import com.example.productservice.dto.ProductResponse;
+import com.example.productservice.mapper.ProductMapper;
 import com.example.productservice.repository.ProductRepository;
 import org.springframework.stereotype.Service;
 
@@ -12,9 +13,14 @@ import java.util.List;
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final ProductMapper productMapper;
 
-    public ProductService(ProductRepository productRepository) {
+    public ProductService(
+            ProductRepository productRepository,
+            ProductMapper productMapper
+    ) {
         this.productRepository = productRepository;
+        this.productMapper = productMapper;
     }
 
     public ProductResponse createProduct(CreateProductRequest request) {
@@ -23,22 +29,17 @@ public class ProductService {
             throw new RuntimeException("Product name already exists");
         }
 
-        Product product = Product.builder()
-                .name(request.name())
-                .description(request.description())
-                .price(request.price())
-                .stock(request.stock())
-                .build();
+        Product product = productMapper.toProduct(request);
 
         Product savedProduct = productRepository.save(product);
 
-        return mapToResponse(savedProduct);
+        return productMapper.toProductResponse(savedProduct);
     }
 
     public List<ProductResponse> getAllProducts() {
         return productRepository.findAll()
                 .stream()
-                .map(this::mapToResponse)
+                .map(productMapper::toProductResponse)
                 .toList();
     }
 
@@ -46,16 +47,6 @@ public class ProductService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Product not found"));
 
-        return mapToResponse(product);
-    }
-
-    private ProductResponse mapToResponse(Product product) {
-        return new ProductResponse(
-                product.getId(),
-                product.getName(),
-                product.getDescription(),
-                product.getPrice(),
-                product.getStock()
-        );
+        return productMapper.toProductResponse(product);
     }
 }
