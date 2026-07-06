@@ -2,11 +2,11 @@ package com.example.orderservice.service;
 
 import com.example.orderservice.dto.CreateOrderItemRequest;
 import com.example.orderservice.dto.CreateOrderRequest;
-import com.example.orderservice.dto.OrderItemResponse;
 import com.example.orderservice.dto.OrderResponse;
 import com.example.orderservice.dto.ProductResponse;
 import com.example.orderservice.entity.Order;
 import com.example.orderservice.entity.OrderItem;
+import com.example.orderservice.mapper.OrderMapper;
 import com.example.orderservice.repository.OrderRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -18,11 +18,18 @@ import java.util.List;
 @Service
 public class OrderService {
 
+    private static final String ORDER_STATUS_CREATED = "CREATED";
+
     private final OrderRepository orderRepository;
+    private final OrderMapper orderMapper;
     private final RestClient restClient;
 
-    public OrderService(OrderRepository orderRepository) {
+    public OrderService(
+            OrderRepository orderRepository,
+            OrderMapper orderMapper
+    ) {
         this.orderRepository = orderRepository;
+        this.orderMapper = orderMapper;
         this.restClient = RestClient.builder()
                 .baseUrl("http://localhost:8083")
                 .build();
@@ -32,7 +39,7 @@ public class OrderService {
 
         Order order = Order.builder()
                 .customerId(request.customerId())
-                .status("CREATED")
+                .status(ORDER_STATUS_CREATED)
                 .createdAt(LocalDateTime.now())
                 .totalPrice(BigDecimal.ZERO)
                 .build();
@@ -51,7 +58,7 @@ public class OrderService {
 
         Order savedOrder = orderRepository.save(order);
 
-        return toOrderResponse(savedOrder);
+        return orderMapper.toOrderResponse(savedOrder);
     }
 
     private OrderItem createOrderItem(
@@ -79,29 +86,5 @@ public class OrderService {
                 .unitPrice(product.price())
                 .totalPrice(totalPrice)
                 .build();
-    }
-
-    private OrderResponse toOrderResponse(Order order) {
-
-        List<OrderItemResponse> itemResponses = order.getItems()
-                .stream()
-                .map(item -> new OrderItemResponse(
-                        item.getId(),
-                        item.getProductId(),
-                        item.getProductName(),
-                        item.getQuantity(),
-                        item.getUnitPrice(),
-                        item.getTotalPrice()
-                ))
-                .toList();
-
-        return new OrderResponse(
-                order.getId(),
-                order.getCustomerId(),
-                order.getTotalPrice(),
-                order.getStatus(),
-                order.getCreatedAt(),
-                itemResponses
-        );
     }
 }
