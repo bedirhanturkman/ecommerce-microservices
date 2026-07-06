@@ -3,6 +3,7 @@ package com.example.orderservice.controller;
 import com.example.orderservice.dto.CreateOrderRequest;
 import com.example.orderservice.dto.OrderResponse;
 import com.example.orderservice.service.OrderService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -16,6 +17,7 @@ public class OrderController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     public OrderResponse createOrder(@RequestBody CreateOrderRequest request) {
         return orderService.createOrder(request);
     }
