@@ -14,6 +14,8 @@ import org.springframework.web.client.RestClient;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import com.example.orderservice.entity.OrderStatus;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderService {
@@ -35,11 +37,12 @@ public class OrderService {
                 .build();
     }
 
+    @Transactional
     public OrderResponse createOrder(CreateOrderRequest request) {
 
         Order order = Order.builder()
                 .customerId(request.customerId())
-                .status(ORDER_STATUS_CREATED)
+                .status(OrderStatus.CREATED)
                 .createdAt(LocalDateTime.now())
                 .totalPrice(BigDecimal.ZERO)
                 .build();
