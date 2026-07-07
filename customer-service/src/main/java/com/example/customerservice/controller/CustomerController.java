@@ -22,7 +22,7 @@ public class CustomerController {
     }
 
     @GetMapping("/me")
-    @PreAuthorize(PermissionConstants.HAS_ROLE_USER_OR_ADMIN)
+    @PreAuthorize(PermissionConstants.HAS_ROLE_USER_OR_ADMIN_OR_SELLER)
     public CustomerResponse getCurrentCustomer(Authentication authentication) {
         return customerService.getCustomerByEmail(authentication.getName());
     }

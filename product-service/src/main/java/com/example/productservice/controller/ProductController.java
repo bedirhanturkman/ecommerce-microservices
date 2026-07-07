@@ -20,19 +20,19 @@ public class ProductController {
     }
 
     @PostMapping
-    @PreAuthorize(PermissionConstants.HAS_ROLE_ADMIN)
+    @PreAuthorize(PermissionConstants.HAS_ROLE_ADMIN_OR_SELLER)
     public ProductResponse createProduct(@RequestBody CreateProductRequest request) {
         return productService.createProduct(request);
     }
 
     @GetMapping
-    @PreAuthorize(PermissionConstants.HAS_ROLE_USER_OR_ADMIN)
+    @PreAuthorize(PermissionConstants.HAS_ROLE_USER_OR_ADMIN_OR_SELLER)
     public List<ProductResponse> getAllProducts() {
         return productService.getAllProducts();
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize(PermissionConstants.HAS_ROLE_USER_OR_ADMIN)
+    @PreAuthorize(PermissionConstants.HAS_ROLE_USER_OR_ADMIN_OR_SELLER)
     public ProductResponse getProductById(@PathVariable String id) {
         return productService.getProductById(id);
     }

@@ -31,4 +31,16 @@ public class PermissionService {
                 .anyMatch(grantedAuthority ->
                         grantedAuthority.getAuthority().equals(authority));
     }
+
+    public boolean isSeller(Authentication authentication) {
+        return hasRole(authentication, PermissionConstants.ROLE_SELLER);
+    }
+
+    public boolean isAdminOrSeller(Authentication authentication) {
+        return isAdmin(authentication) || isSeller(authentication);
+    }
+
+    public boolean isUserOrAdminOrSeller(Authentication authentication) {
+        return isUser(authentication) || isAdmin(authentication) || isSeller(authentication);
+    }
 }
