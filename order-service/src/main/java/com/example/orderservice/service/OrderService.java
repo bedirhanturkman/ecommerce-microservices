@@ -1,40 +1,37 @@
 package com.example.orderservice.service;
 
+import com.example.orderservice.client.ProductClient;
 import com.example.orderservice.dto.CreateOrderItemRequest;
 import com.example.orderservice.dto.CreateOrderRequest;
 import com.example.orderservice.dto.OrderResponse;
 import com.example.orderservice.dto.ProductResponse;
 import com.example.orderservice.entity.Order;
 import com.example.orderservice.entity.OrderItem;
+import com.example.orderservice.entity.OrderStatus;
 import com.example.orderservice.mapper.OrderMapper;
 import com.example.orderservice.repository.OrderRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import com.example.orderservice.entity.OrderStatus;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderService {
 
-    private static final String ORDER_STATUS_CREATED = "CREATED";
-
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
-    private final RestClient restClient;
+    private final ProductClient productClient;
 
     public OrderService(
             OrderRepository orderRepository,
-            OrderMapper orderMapper
+            OrderMapper orderMapper,
+            ProductClient productClient
     ) {
         this.orderRepository = orderRepository;
         this.orderMapper = orderMapper;
-        this.restClient = RestClient.builder()
-                .baseUrl("http://localhost:8083")
-                .build();
+        this.productClient = productClient;
     }
 
     @Transactional
@@ -68,14 +65,7 @@ public class OrderService {
             Order order,
             CreateOrderItemRequest itemRequest
     ) {
-        ProductResponse product = restClient.get()
-                .uri("/api/v1/products/{id}", itemRequest.productId())
-                .retrieve()
-                .body(ProductResponse.class);
-
-        if (product == null) {
-            throw new RuntimeException("Product not found");
-        }
+        ProductResponse product = productClient.getProductById(itemRequest.productId());
 
         BigDecimal totalPrice = product.price().multiply(
                 BigDecimal.valueOf(itemRequest.quantity())
