@@ -9,9 +9,9 @@ public class ProductClient {
 
     private final RestClient restClient;
 
-    public ProductClient() {
-        this.restClient = RestClient.builder()
-                .baseUrl("http://localhost:8083")
+    public ProductClient(RestClient.Builder restClientBuilder) {
+        this.restClient = restClientBuilder
+                .baseUrl("http://product-service")
                 .build();
     }
 

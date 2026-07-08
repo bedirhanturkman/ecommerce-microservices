@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: ${ORDER_DB_URL:jdbc:postgresql://localhost:5434/order_db}
+    url: ${ORDER_DB_URL:jdbc:postgresql://localhost:5432/order_db}
     username: ${ORDER_DB_USERNAME:postgres}
     password: ${ORDER_DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
