@@ -8,6 +8,7 @@ import com.example.authservice.dto.RegisterRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 @Service
 public class AuthService {
@@ -19,7 +20,7 @@ public class AuthService {
     private final JwtService jwtService;
 
     public AuthService(
-            RestClient.Builder restClientBuilder,
+            @Qualifier("loadBalancedRestClientBuilder") RestClient.Builder restClientBuilder,
             PasswordEncoder passwordEncoder,
             JwtService jwtService
     ) {
