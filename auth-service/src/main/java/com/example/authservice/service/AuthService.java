@@ -12,29 +12,36 @@ import org.springframework.web.client.RestClient;
 @Service
 public class AuthService {
 
+    private static final String DEFAULT_ROLE = "USER";
+
     private final RestClient restClient;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
     public AuthService(
+            RestClient.Builder restClientBuilder,
             PasswordEncoder passwordEncoder,
             JwtService jwtService
     ) {
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
-        this.restClient = RestClient.builder()
-                .baseUrl("http://localhost:8081")
+        this.restClient = restClientBuilder
+                .baseUrl("http://customer-service")
                 .build();
     }
 
     public AuthResponse register(RegisterRequest request) {
+
+        String role = request.role() == null || request.role().isBlank()
+                ? DEFAULT_ROLE
+                : request.role();
 
         CreateCustomerRequest customerRequest = new CreateCustomerRequest(
                 request.firstName(),
                 request.lastName(),
                 request.email(),
                 passwordEncoder.encode(request.password()),
-                "USER"
+                role
         );
 
         CustomerInternalResponse savedCustomer = restClient.post()
