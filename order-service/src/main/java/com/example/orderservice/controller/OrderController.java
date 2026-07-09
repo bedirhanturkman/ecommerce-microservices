@@ -19,7 +19,10 @@ public class OrderController {
 
     @PostMapping
     @PreAuthorize(PermissionConstants.HAS_ROLE_USER_OR_ADMIN)
-    public OrderResponse createOrder(@RequestBody CreateOrderRequest request) {
-        return orderService.createOrder(request);
+    public OrderResponse createOrder(
+            @RequestHeader("Authorization") String authorizationHeader,
+            @RequestBody CreateOrderRequest request
+    ) {
+        return orderService.createOrder(request, authorizationHeader);
     }
 }
