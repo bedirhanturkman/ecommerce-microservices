@@ -35,8 +35,10 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponse createOrder(CreateOrderRequest request) {
-
+    public OrderResponse createOrder(
+            CreateOrderRequest request,
+            String authorizationHeader
+    ) {
         Order order = Order.builder()
                 .customerId(request.customerId())
                 .status(OrderStatus.CREATED)
@@ -46,7 +48,7 @@ public class OrderService {
 
         List<OrderItem> orderItems = request.items()
                 .stream()
-                .map(itemRequest -> createOrderItem(order, itemRequest))
+                .map(itemRequest -> createOrderItem(order, itemRequest, authorizationHeader))
                 .toList();
 
         BigDecimal totalPrice = orderItems.stream()
@@ -63,9 +65,13 @@ public class OrderService {
 
     private OrderItem createOrderItem(
             Order order,
-            CreateOrderItemRequest itemRequest
+            CreateOrderItemRequest itemRequest,
+            String authorizationHeader
     ) {
-        ProductResponse product = productClient.getProductById(itemRequest.productId());
+        ProductResponse product = productClient.getProductById(
+                itemRequest.productId(),
+                authorizationHeader
+        );
 
         BigDecimal totalPrice = product.price().multiply(
                 BigDecimal.valueOf(itemRequest.quantity())
