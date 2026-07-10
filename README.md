@@ -1,65 +1,111 @@
 # E-Commerce Microservices Backend
 
-Spring Boot microservice mimaride geliştirilen e-ticaret backend projesidir.
+A Spring Boot based e-commerce backend built with a Microservice Architecture.
 
-## Amaç
+## Architecture
 
-Bu proje staj sürecinde, Spring Boot ve Spring Cloud kullanarak gerçek hayata yakın bir microservice backend mimarisi kurmak amacıyla geliştirilmiştir.
+- API Gateway
+- Config Server
+- Eureka Server
+- Auth Service
+- Customer Service (PostgreSQL)
+- Order Service (PostgreSQL)
+- Product Service (MongoDB)
+- Apache Kafka
 
-## Servisler
+## Technologies
 
-- eureka-server
-- config-server
-- api-gateway
-- auth-service
-- customer-service
-- product-service
-- order-service
-
-## Kullanılan Teknolojiler
-
-- Java
-- Spring Boot
-- Spring Cloud
-- Spring Cloud Gateway
-- Netflix Eureka
-- Spring Cloud Config Server
+- Java 25
+- Spring Boot 4
 - Spring Security
 - OAuth2 Resource Server
+- JWT Authentication
+- Spring Cloud Gateway
+- Spring Cloud Config
+- Netflix Eureka
+- Spring Data JPA
+- Spring Data MongoDB
 - PostgreSQL
 - MongoDB
+- Apache Kafka
 - Docker
+- MapStruct
 - Maven
-- Lombok
 
-## Mimari
+## Current Features
 
-Client / Postman
-→ API Gateway
-→ Microservices
-→ Her servisin kendi veritabanı
+### Authentication
 
-## Çalıştırma Sırası
+- JWT based authentication
+- Login / Register
+- Password encryption
+- Role based authorization
 
-1. eureka-server
-2. config-server
-3. customer-service
-4. auth-service
-5. product-service
-6. order-service
-7. api-gateway
+### Customer Service
 
-## Mevcut Durum
+- Customer management
+- Internal APIs
+- Resource Server
+- MapStruct mapping
+- Permission abstraction
 
-- Customer Service Resource Server yapısına geçirildi.
-- Auth Service JWT üretiminden sorumlu hale getirildi.
-- Config Server ile merkezi konfigürasyon yönetimi kuruldu.
-- Eureka ile servis keşfi sağlandı.
-- API Gateway ile merkezi yönlendirme yapıldı.
+### Product Service
 
-## Roadmap
+- MongoDB based product management
+- Resource Server
+- Role based authorization
+- MapStruct
 
-- Product Service Resource Server yapısına geçirilecek.
-- Order Service Resource Server yapısına geçirilecek.
-- SELLER rolü eklenecek.
-- Rate Limiting ve Circuit Breaker eklenecek.
+### Order Service
+
+- Order creation
+- Transaction management
+- OrderStatus enum
+- ProductClient abstraction
+- Resource Server
+- MapStruct
+
+### Event Driven
+
+- Kafka Producer
+- OrderCreatedEvent publishing
+- order-created topic
+
+## Security
+
+Supported Roles
+
+- USER
+- SELLER
+- ADMIN
+
+Authorization is implemented using Spring Security with JWT.
+
+## Service Communication
+
+- REST (current)
+- Kafka Producer (implemented)
+- Kafka Consumer (next step)
+
+## Databases
+
+| Service | Database |
+|----------|----------|
+| Customer Service | PostgreSQL |
+| Order Service | PostgreSQL |
+| Product Service | MongoDB |
+
+## Infrastructure
+
+- Docker
+- Config Server
+- Eureka Service Discovery
+- API Gateway
+
+## Next Steps
+
+- Product Service Kafka Consumer
+- Stock update via Kafka
+- Retry / DLQ
+- Saga Pattern
+- Distributed Tracing
