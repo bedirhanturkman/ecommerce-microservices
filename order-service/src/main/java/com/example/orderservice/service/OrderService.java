@@ -8,7 +8,9 @@ import com.example.orderservice.dto.ProductResponse;
 import com.example.orderservice.entity.Order;
 import com.example.orderservice.entity.OrderItem;
 import com.example.orderservice.entity.OrderStatus;
+import com.example.orderservice.mapper.OrderEventMapper;
 import com.example.orderservice.mapper.OrderMapper;
+import com.example.orderservice.producer.OrderProducer;
 import com.example.orderservice.repository.OrderRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,15 +25,21 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
     private final ProductClient productClient;
+    private final OrderProducer orderProducer;
+    private final OrderEventMapper orderEventMapper;
 
     public OrderService(
             OrderRepository orderRepository,
             OrderMapper orderMapper,
-            ProductClient productClient
+            ProductClient productClient,
+            OrderProducer orderProducer,
+            OrderEventMapper orderEventMapper
     ) {
         this.orderRepository = orderRepository;
         this.orderMapper = orderMapper;
         this.productClient = productClient;
+        this.orderProducer = orderProducer;
+        this.orderEventMapper = orderEventMapper;
     }
 
     @Transactional
@@ -59,6 +67,10 @@ public class OrderService {
         order.setTotalPrice(totalPrice);
 
         Order savedOrder = orderRepository.save(order);
+
+        orderProducer.publishOrderCreatedEvent(
+                orderEventMapper.toOrderCreatedEvent(savedOrder)
+        );
 
         return orderMapper.toOrderResponse(savedOrder);
     }
