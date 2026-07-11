@@ -18,7 +18,7 @@ public class InventoryController {
     private final InventoryService inventoryService;
 
     @PostMapping
-    @PreAuthorize(PermissionConstants.HAS_ROLE_ADMIN_OR_SELLER)
+    @PreAuthorize(PermissionConstants.IS_ADMIN_OR_SELLER)
     public InventoryResponse createInventory(
             @Valid @RequestBody CreateInventoryRequest request
     ) {
@@ -26,7 +26,7 @@ public class InventoryController {
     }
 
     @GetMapping("/{productId}")
-    @PreAuthorize(PermissionConstants.HAS_ROLE_USER_OR_ADMIN_OR_SELLER)
+    @PreAuthorize(PermissionConstants.IS_USER_OR_ADMIN_OR_SELLER)
     public InventoryResponse getInventoryByProductId(
             @PathVariable String productId
     ) {
@@ -34,7 +34,7 @@ public class InventoryController {
     }
 
     @PatchMapping("/{productId}/increase")
-    @PreAuthorize(PermissionConstants.HAS_ROLE_ADMIN_OR_SELLER)
+    @PreAuthorize(PermissionConstants.IS_ADMIN_OR_SELLER)
     public InventoryResponse increaseStock(
             @PathVariable String productId,
             @Valid @RequestBody StockChangeRequest request
@@ -43,7 +43,7 @@ public class InventoryController {
     }
 
     @PatchMapping("/{productId}/decrease")
-    @PreAuthorize(PermissionConstants.HAS_ROLE_ADMIN)
+    @PreAuthorize(PermissionConstants.IS_ADMIN)
     public InventoryResponse decreaseStock(
             @PathVariable String productId,
             @Valid @RequestBody StockChangeRequest request

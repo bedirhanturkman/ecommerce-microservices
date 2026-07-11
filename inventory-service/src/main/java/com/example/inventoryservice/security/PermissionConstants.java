@@ -9,12 +9,12 @@ public final class PermissionConstants {
     public static final String ROLE_ADMIN = "ADMIN";
     public static final String ROLE_SELLER = "SELLER";
 
-    public static final String HAS_ROLE_ADMIN =
-            "hasRole('" + ROLE_ADMIN + "')";
+    public static final String IS_ADMIN =
+            "@permissionService.isAdmin(authentication)";
 
-    public static final String HAS_ROLE_ADMIN_OR_SELLER =
-            "hasAnyRole('" + ROLE_ADMIN + "', '" + ROLE_SELLER + "')";
+    public static final String IS_ADMIN_OR_SELLER =
+            "@permissionService.isAdminOrSeller(authentication)";
 
-    public static final String HAS_ROLE_USER_OR_ADMIN_OR_SELLER =
-            "hasAnyRole('" + ROLE_USER + "', '" + ROLE_ADMIN + "', '" + ROLE_SELLER + "')";
+    public static final String IS_USER_OR_ADMIN_OR_SELLER =
+            "@permissionService.isUserOrAdminOrSeller(authentication)";
 }
