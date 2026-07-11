@@ -17,9 +17,9 @@ import java.time.Instant;
 @Document(collection = "inventories")
 @Getter
 @Setter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class Inventory {
 
     @Id
@@ -38,6 +38,6 @@ public class Inventory {
     @LastModifiedDate
     private Instant updatedAt;
 
-    @Version
+    @Version // aynı stok kaydı üzerinde eş zamanlı iki güncellemede lost update riskini azaltır.
     private Long version;
 }
