@@ -1,9 +1,9 @@
 package com.example.orderservice.mapper;
 
+import com.example.commonevents.order.OrderCreatedEvent;
+import com.example.commonevents.order.OrderCreatedItemEvent;
 import com.example.orderservice.entity.Order;
 import com.example.orderservice.entity.OrderItem;
-import com.example.orderservice.event.OrderCreatedEvent;
-import com.example.orderservice.event.OrderCreatedItemEvent;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
