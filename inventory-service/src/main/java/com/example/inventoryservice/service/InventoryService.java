@@ -68,24 +68,49 @@ public class InventoryService {
 
         Inventory inventory = findByProductId(productId);
 
-        int availableQuantity =
-                inventory.getQuantity() - inventory.getReservedQuantity();
-
-        if (availableQuantity < request.quantity()) {
-            throw new InsufficientStockException(
-                    productId,
-                    availableQuantity,
-                    request.quantity()
-            );
-        }
-
-        inventory.setQuantity(
-                inventory.getQuantity() - request.quantity()
-        );
+        decreaseStock(inventory, productId, request.quantity());
 
         Inventory savedInventory = inventoryRepository.save(inventory);
 
         return inventoryMapper.toInventoryResponse(savedInventory);
+    }
+
+    public void decreaseStockFromOrder(
+            String productId,
+            Integer requestedQuantity
+    ) {
+        validateStockChangeQuantity(requestedQuantity);
+
+        Inventory inventory = findByProductId(productId);
+
+        decreaseStock(inventory, productId, requestedQuantity);
+
+        inventoryRepository.save(inventory);
+    }
+
+    private void decreaseStock(
+            Inventory inventory,
+            String productId,
+            Integer requestedQuantity
+    ) {
+        int reservedQuantity = inventory.getReservedQuantity() == null
+                ? 0
+                : inventory.getReservedQuantity();
+
+        int availableQuantity =
+                inventory.getQuantity() - reservedQuantity;
+
+        if (availableQuantity < requestedQuantity) {
+            throw new InsufficientStockException(
+                    productId,
+                    availableQuantity,
+                    requestedQuantity
+            );
+        }
+
+        inventory.setQuantity(
+                inventory.getQuantity() - requestedQuantity
+        );
     }
 
     private Inventory findByProductId(String productId) {
