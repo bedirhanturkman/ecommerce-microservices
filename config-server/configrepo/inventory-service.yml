@@ -10,5 +10,5 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
-      group-id: inventory-service-test-v2
-      auto-offset-reset: latest
+      group-id: inventory-service
+      auto-offset-reset: earliest

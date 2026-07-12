@@ -41,7 +41,7 @@ public class KafkaConsumerConfig {
 
         properties.put(
                 ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,
-                "latest"
+                "earliest"
         );
 
         JacksonJsonDeserializer<OrderCreatedEvent> valueDeserializer =
