@@ -42,7 +42,8 @@ public class InventoryConsumer {
                 event.items().size()
         );
 
-        event.items().forEach(item -> {
+        for (var item : event.items()) {
+
             log.info(
                     "Reducing inventory. orderId={}, productId={}, quantity={}",
                     event.orderId(),
@@ -61,7 +62,7 @@ public class InventoryConsumer {
                     item.productId(),
                     item.quantity()
             );
-        });
+        }
 
         processedEventService.markAsProcessed(event.orderId());
 
