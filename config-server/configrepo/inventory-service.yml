@@ -12,3 +12,9 @@ spring:
     consumer:
       group-id: inventory-service
       auto-offset-reset: earliest
+
+inventory:
+  kafka:
+    retry:
+      interval-ms: 2000
+      max-retries: 2

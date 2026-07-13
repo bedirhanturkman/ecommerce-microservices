@@ -25,8 +25,13 @@ public class KafkaConsumerConfig {
     @Value("${spring.kafka.consumer.group-id}")
     private String groupId;
 
+    @Value("${spring.kafka.consumer.auto-offset-reset}")
+    private String autoOffsetReset;
+
     @Bean
-    public ConsumerFactory<String, OrderCreatedEvent> orderCreatedConsumerFactory() {
+    public ConsumerFactory<String, OrderCreatedEvent>
+    orderCreatedConsumerFactory() {
+
         Map<String, Object> properties = new HashMap<>();
 
         properties.put(
@@ -41,7 +46,7 @@ public class KafkaConsumerConfig {
 
         properties.put(
                 ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,
-                "earliest"
+                autoOffsetReset
         );
 
         JacksonJsonDeserializer<OrderCreatedEvent> valueDeserializer =
@@ -60,12 +65,17 @@ public class KafkaConsumerConfig {
 
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, OrderCreatedEvent>
-    orderCreatedKafkaListenerContainerFactory() {
-
+    orderCreatedKafkaListenerContainerFactory(
+            KafkaErrorHandlerConfig kafkaErrorHandlerConfig
+    ) {
         ConcurrentKafkaListenerContainerFactory<String, OrderCreatedEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
 
         factory.setConsumerFactory(orderCreatedConsumerFactory());
+
+        factory.setCommonErrorHandler(
+                kafkaErrorHandlerConfig.createErrorHandler()
+        );
 
         return factory;
     }
