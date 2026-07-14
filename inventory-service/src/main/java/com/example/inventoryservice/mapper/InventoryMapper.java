@@ -1,7 +1,7 @@
 package com.example.inventoryservice.mapper;
 
-import com.example.inventoryservice.document.Inventory;
 import com.example.inventoryservice.dto.InventoryResponse;
+import com.example.inventoryservice.entity.Inventory;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
@@ -9,10 +9,18 @@ import org.mapstruct.Mapping;
 public interface InventoryMapper {
 
     @Mapping(
+            target = "id",
+            expression = "java(mapId(inventory.getId()))"
+    )
+    @Mapping(
             target = "availableQuantity",
             expression = "java(calculateAvailableQuantity(inventory))"
     )
     InventoryResponse toInventoryResponse(Inventory inventory);
+
+    default String mapId(Long id) {
+        return id == null ? null : id.toString();
+    }
 
     default Integer calculateAvailableQuantity(Inventory inventory) {
         if (inventory == null) {

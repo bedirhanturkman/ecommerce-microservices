@@ -1,10 +1,10 @@
 package com.example.inventoryservice.repository;
 
-import com.example.inventoryservice.document.ProcessedEvent;
-import org.springframework.data.mongodb.repository.MongoRepository;
+import com.example.inventoryservice.entity.ProcessedEvent;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ProcessedEventRepository
-        extends MongoRepository<ProcessedEvent, String> {
+        extends JpaRepository<ProcessedEvent, Long> {
 
     boolean existsByOrderId(Long orderId);
 }
