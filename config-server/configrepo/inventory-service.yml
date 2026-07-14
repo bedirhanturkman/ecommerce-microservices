@@ -2,16 +2,28 @@ server:
   port: 8085
 
 spring:
-  data:
-    mongodb:
-      uri: ${INVENTORY_MONGO_URI:mongodb://localhost:27017/inventory_db}
-      auto-index-creation: true
+  datasource:
+    url: ${INVENTORY_DB_URL:jdbc:postgresql://localhost:5432/inventory_db}
+    username: ${INVENTORY_DB_USERNAME:postgres}
+    password: ${INVENTORY_DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
       group-id: inventory-service
-      auto-offset-reset: earliest
+      auto-offset-reset: latest
 
 inventory:
   kafka:

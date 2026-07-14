@@ -1,8 +1,7 @@
 package com.example.inventoryservice.consumer;
 
 import com.example.commonevents.order.OrderCreatedEvent;
-import com.example.inventoryservice.service.InventoryService;
-import com.example.inventoryservice.service.ProcessedEventService;
+import com.example.inventoryservice.service.OrderCreatedEventProcessingService;
 import com.example.inventoryservice.validation.OrderCreatedEventValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,8 +15,7 @@ public class InventoryConsumer {
 
     private static final String ORDER_CREATED_TOPIC = "order-created";
 
-    private final InventoryService inventoryService;
-    private final ProcessedEventService processedEventService;
+    private final OrderCreatedEventProcessingService processingService;
     private final OrderCreatedEventValidator eventValidator;
 
     @KafkaListener(
@@ -28,43 +26,21 @@ public class InventoryConsumer {
 
         eventValidator.validate(event);
 
-        if (processedEventService.isProcessed(event.orderId())) {
-            log.info(
-                    "OrderCreatedEvent already processed. orderId={}",
-                    event.orderId()
-            );
-            return;
-        }
-
         log.info(
                 "OrderCreatedEvent received. orderId={}, itemCount={}",
                 event.orderId(),
                 event.items().size()
         );
 
-        for (var item : event.items()) {
+        boolean processed = processingService.process(event);
 
+        if (!processed) {
             log.info(
-                    "Reducing inventory. orderId={}, productId={}, quantity={}",
-                    event.orderId(),
-                    item.productId(),
-                    item.quantity()
+                    "OrderCreatedEvent already processed. orderId={}",
+                    event.orderId()
             );
-
-            inventoryService.decreaseStockFromOrder(
-                    item.productId(),
-                    item.quantity()
-            );
-
-            log.info(
-                    "Inventory reduced. orderId={}, productId={}, quantity={}",
-                    event.orderId(),
-                    item.productId(),
-                    item.quantity()
-            );
+            return;
         }
-
-        processedEventService.markAsProcessed(event.orderId());
 
         log.info(
                 "OrderCreatedEvent processed successfully. orderId={}",

@@ -1,12 +1,12 @@
 package com.example.inventoryservice.repository;
 
-import com.example.inventoryservice.document.Inventory;
-import org.springframework.data.mongodb.repository.MongoRepository;
+import com.example.inventoryservice.entity.Inventory;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
 public interface InventoryRepository
-        extends MongoRepository<Inventory, String> {
+        extends JpaRepository<Inventory, Long> {
 
     Optional<Inventory> findByProductId(String productId);
 

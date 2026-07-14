@@ -1,6 +1,6 @@
 package com.example.inventoryservice.service;
 
-import com.example.inventoryservice.document.ProcessedEvent;
+import com.example.inventoryservice.entity.ProcessedEvent;
 import com.example.inventoryservice.repository.ProcessedEventRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
