@@ -13,26 +13,31 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class InventoryConsumer {
 
-    private static final String ORDER_CREATED_TOPIC = "order-created";
+    private static final String ORDER_CREATED_TOPIC =
+            "order-created";
 
     private final OrderCreatedEventProcessingService processingService;
     private final OrderCreatedEventValidator eventValidator;
 
     @KafkaListener(
             topics = ORDER_CREATED_TOPIC,
-            containerFactory = "orderCreatedKafkaListenerContainerFactory"
+            containerFactory =
+                    "orderCreatedKafkaListenerContainerFactory"
     )
-    public void consumeOrderCreatedEvent(OrderCreatedEvent event) {
-
+    public void consumeOrderCreatedEvent(
+            OrderCreatedEvent event
+    ) {
         eventValidator.validate(event);
 
         log.info(
-                "OrderCreatedEvent received. orderId={}, itemCount={}",
+                "Inventory reservation event received. " +
+                        "orderId={}, itemCount={}",
                 event.orderId(),
                 event.items().size()
         );
 
-        boolean processed = processingService.process(event);
+        boolean processed =
+                processingService.process(event);
 
         if (!processed) {
             log.info(
@@ -43,7 +48,7 @@ public class InventoryConsumer {
         }
 
         log.info(
-                "OrderCreatedEvent processed successfully. orderId={}",
+                "Inventory reservation completed. orderId={}",
                 event.orderId()
         );
     }

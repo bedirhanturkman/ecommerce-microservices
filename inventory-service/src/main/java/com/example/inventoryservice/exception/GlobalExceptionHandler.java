@@ -133,6 +133,32 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(ReservationAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse>
+    handleReservationAlreadyExists(
+            ReservationAlreadyExistsException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                HttpStatus.CONFLICT,
+                exception.getMessage(),
+                request.getRequestURI()
+        );
+    }
+
+    @ExceptionHandler(ActiveReservationNotFoundException.class)
+    public ResponseEntity<ErrorResponse>
+    handleActiveReservationNotFound(
+            ActiveReservationNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                HttpStatus.CONFLICT,
+                exception.getMessage(),
+                request.getRequestURI()
+        );
+    }
+
     private ResponseEntity<ErrorResponse> buildErrorResponse(
             HttpStatus status,
             String message,

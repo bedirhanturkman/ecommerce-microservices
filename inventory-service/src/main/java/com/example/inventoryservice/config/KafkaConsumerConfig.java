@@ -10,6 +10,7 @@ import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
 
 import java.util.HashMap;
@@ -49,17 +50,31 @@ public class KafkaConsumerConfig {
                 autoOffsetReset
         );
 
-        JacksonJsonDeserializer<OrderCreatedEvent> valueDeserializer =
-                new JacksonJsonDeserializer<>(OrderCreatedEvent.class);
+        JacksonJsonDeserializer<OrderCreatedEvent> jsonDeserializer =
+                new JacksonJsonDeserializer<>(
+                        OrderCreatedEvent.class
+                );
 
-        valueDeserializer.addTrustedPackages(
+        jsonDeserializer.addTrustedPackages(
                 "com.example.commonevents.order"
         );
 
+        ErrorHandlingDeserializer<OrderCreatedEvent>
+                errorHandlingValueDeserializer =
+                new ErrorHandlingDeserializer<>(
+                        jsonDeserializer
+                );
+
+        ErrorHandlingDeserializer<String>
+                errorHandlingKeyDeserializer =
+                new ErrorHandlingDeserializer<>(
+                        new StringDeserializer()
+                );
+
         return new DefaultKafkaConsumerFactory<>(
                 properties,
-                new StringDeserializer(),
-                valueDeserializer
+                errorHandlingKeyDeserializer,
+                errorHandlingValueDeserializer
         );
     }
 
@@ -68,10 +83,13 @@ public class KafkaConsumerConfig {
     orderCreatedKafkaListenerContainerFactory(
             KafkaErrorHandlerConfig kafkaErrorHandlerConfig
     ) {
-        ConcurrentKafkaListenerContainerFactory<String, OrderCreatedEvent> factory =
+        ConcurrentKafkaListenerContainerFactory<String, OrderCreatedEvent>
+                factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
 
-        factory.setConsumerFactory(orderCreatedConsumerFactory());
+        factory.setConsumerFactory(
+                orderCreatedConsumerFactory()
+        );
 
         factory.setCommonErrorHandler(
                 kafkaErrorHandlerConfig.createErrorHandler()
