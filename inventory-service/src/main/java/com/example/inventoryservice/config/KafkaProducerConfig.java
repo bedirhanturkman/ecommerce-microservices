@@ -17,15 +17,17 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Configuration
-public class KafkaDltProducerConfig {
+public class KafkaProducerConfig {
 
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
 
     @Bean
-    public ProducerFactory<String, Object> dltProducerFactory() {
+    public ProducerFactory<String, Object>
+    inventoryKafkaProducerFactory() {
 
-        Map<String, Object> properties = new LinkedHashMap<>();
+        Map<String, Object> properties =
+                new LinkedHashMap<>();
 
         properties.put(
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
@@ -59,9 +61,11 @@ public class KafkaDltProducerConfig {
     }
 
     @Bean
-    public KafkaTemplate<String, Object> dltKafkaTemplate() {
+    public KafkaTemplate<String, Object>
+    inventoryKafkaTemplate() {
+
         return new KafkaTemplate<>(
-                dltProducerFactory()
+                inventoryKafkaProducerFactory()
         );
     }
 }

@@ -27,6 +27,10 @@ spring:
 
 inventory:
   kafka:
+    topics:
+      reserved: ${INVENTORY_RESERVED_TOPIC:inventory-reserved}
+      reservation-failed: ${INVENTORY_RESERVATION_FAILED_TOPIC:inventory-reservation-failed}
+
     retry:
       interval-ms: 2000
       max-retries: 2

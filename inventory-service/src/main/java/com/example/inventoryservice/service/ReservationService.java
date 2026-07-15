@@ -1,5 +1,6 @@
 package com.example.inventoryservice.service;
 
+import com.example.commonevents.inventory.ReservedInventoryItem;
 import com.example.commonevents.order.OrderCreatedItemEvent;
 import com.example.inventoryservice.entity.Inventory;
 import com.example.inventoryservice.entity.InventoryReservation;
@@ -11,10 +12,12 @@ import com.example.inventoryservice.exception.InventoryNotFoundException;
 import com.example.inventoryservice.exception.ReservationAlreadyExistsException;
 import com.example.inventoryservice.repository.InventoryRepository;
 import com.example.inventoryservice.repository.InventoryReservationRepository;
+import com.example.inventoryservice.service.model.ReservationResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -30,7 +33,7 @@ public class ReservationService {
     private final InventoryReservationRepository reservationRepository;
 
     @Transactional
-    public void reserveStock(
+    public ReservationResult reserveStock(
             Long orderId,
             List<OrderCreatedItemEvent> items
     ) {
@@ -51,10 +54,9 @@ public class ReservationService {
         List<InventoryReservation> reservationsToCreate =
                 new ArrayList<>();
 
-        /*
-         * Önce bütün ürünler ve stoklar kontrol edilir.
-         * Henüz veritabanına yazılmaz.
-         */
+        List<ReservedInventoryItem> reservedItems =
+                new ArrayList<>();
+
         for (Map.Entry<String, Integer> entry
                 : requestedQuantities.entrySet()) {
 
@@ -94,14 +96,16 @@ public class ReservationService {
 
             reservationsToCreate.add(reservation);
             inventoriesToUpdate.add(inventory);
+
+            reservedItems.add(
+                    new ReservedInventoryItem(
+                            productId,
+                            requestedQuantity
+                    )
+            );
         }
 
         try {
-            /*
-             * Aynı transaction içinde:
-             * 1. Reservation kayıtları oluşturulur.
-             * 2. Inventory reservedQuantity güncellenir.
-             */
             reservationRepository.saveAllAndFlush(
                     reservationsToCreate
             );
@@ -111,8 +115,16 @@ public class ReservationService {
             );
 
         } catch (DataIntegrityViolationException exception) {
-            throw new ReservationAlreadyExistsException(orderId);
+            throw new ReservationAlreadyExistsException(
+                    orderId
+            );
         }
+
+        return new ReservationResult(
+                orderId,
+                List.copyOf(reservedItems),
+                now
+        );
     }
 
     @Transactional

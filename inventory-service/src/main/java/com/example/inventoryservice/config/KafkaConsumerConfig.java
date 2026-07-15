@@ -79,12 +79,13 @@ public class KafkaConsumerConfig {
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, OrderCreatedEvent>
+    public ConcurrentKafkaListenerContainerFactory
+            <String, OrderCreatedEvent>
     orderCreatedKafkaListenerContainerFactory(
             KafkaErrorHandlerConfig kafkaErrorHandlerConfig
     ) {
-        ConcurrentKafkaListenerContainerFactory<String, OrderCreatedEvent>
-                factory =
+        ConcurrentKafkaListenerContainerFactory
+                <String, OrderCreatedEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
 
         factory.setConsumerFactory(
@@ -94,7 +95,6 @@ public class KafkaConsumerConfig {
         factory.setCommonErrorHandler(
                 kafkaErrorHandlerConfig.createErrorHandler()
         );
-
         return factory;
     }
 }
