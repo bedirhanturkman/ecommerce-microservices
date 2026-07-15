@@ -35,7 +35,9 @@ public class OrderCreatedEventProcessingService {
 
         applicationEventPublisher.publishEvent(
                 new InventoryReservationCompletedEvent(
-                        result.orderId(),
+                        event.orderId(),
+                        event.customerId(),
+                        event.totalPrice(),
                         result.reservedItems(),
                         result.reservedAt()
                 )
