@@ -23,6 +23,8 @@ public class InventoryReservationEventListener {
         InventoryReservedEvent kafkaEvent =
                 new InventoryReservedEvent(
                         event.orderId(),
+                        event.customerId(),
+                        event.totalAmount(),
                         event.reservedItems(),
                         event.reservedAt()
                 );
