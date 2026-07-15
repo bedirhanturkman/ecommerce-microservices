@@ -12,6 +12,8 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.util.backoff.FixedBackOff;
+import com.example.inventoryservice.exception.ActiveReservationNotFoundException;
+import com.example.inventoryservice.exception.ReservationAlreadyExistsException;
 
 @Slf4j
 @Component
@@ -60,7 +62,9 @@ public class KafkaErrorHandlerConfig {
                 InvalidOrderCreatedEventException.class,
                 InventoryNotFoundException.class,
                 InsufficientStockException.class,
-                InvalidStockQuantityException.class
+                InvalidStockQuantityException.class,
+                ReservationAlreadyExistsException.class,
+                ActiveReservationNotFoundException.class
         );
 
         errorHandler.setRetryListeners(

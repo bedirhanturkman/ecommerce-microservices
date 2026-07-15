@@ -90,24 +90,6 @@ public class InventoryService {
         return inventoryMapper.toInventoryResponse(savedInventory);
     }
 
-    @Transactional
-    public void decreaseStockFromOrder(
-            String productId,
-            Integer requestedQuantity
-    ) {
-        validateStockChangeQuantity(requestedQuantity);
-
-        Inventory inventory = findByProductId(productId);
-
-        decreaseInventory(
-                inventory,
-                productId,
-                requestedQuantity
-        );
-
-        inventoryRepository.save(inventory);
-    }
-
     private void decreaseInventory(
             Inventory inventory,
             String productId,
