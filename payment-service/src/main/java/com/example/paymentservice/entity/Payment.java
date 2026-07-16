@@ -1,5 +1,6 @@
 package com.example.paymentservice.entity;
 
+import com.example.commonevents.payment.PaymentFailureCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
@@ -77,11 +78,23 @@ public class Payment {
     )
     private PaymentStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(
+            name = "failure_code",
+            length = 50
+    )
+    private PaymentFailureCode failureCode;
+
     @Column(
             name = "failure_reason",
             length = 500
     )
     private String failureReason;
+
+    @Column(
+            name = "completed_at"
+    )
+    private Instant completedAt;
 
     @CreatedDate
     @Column(

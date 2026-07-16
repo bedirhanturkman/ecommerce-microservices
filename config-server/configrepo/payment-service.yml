@@ -29,7 +29,13 @@ payment:
   kafka:
     topics:
       inventory-reserved: ${INVENTORY_RESERVED_TOPIC:inventory-reserved}
+      succeeded: ${PAYMENT_SUCCEEDED_TOPIC:payment-succeeded}
+      failed: ${PAYMENT_FAILED_TOPIC:payment-failed}
 
     retry:
       interval-ms: 2000
       max-retries: 2
+
+  processing:
+    simulation:
+      failure-threshold: ${PAYMENT_FAILURE_THRESHOLD:100000.00}

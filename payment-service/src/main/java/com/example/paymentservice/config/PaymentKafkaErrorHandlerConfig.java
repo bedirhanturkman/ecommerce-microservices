@@ -2,6 +2,7 @@ package com.example.paymentservice.config;
 
 import com.example.paymentservice.exception.InvalidInventoryReservedEventException;
 import com.example.paymentservice.exception.PaymentAlreadyExistsException;
+import com.example.paymentservice.exception.PaymentNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -73,6 +74,7 @@ public class PaymentKafkaErrorHandlerConfig {
         errorHandler.addNotRetryableExceptions(
                 InvalidInventoryReservedEventException.class,
                 PaymentAlreadyExistsException.class,
+                PaymentNotFoundException.class,
                 DeserializationException.class
         );
 

@@ -1,8 +1,11 @@
 package com.example.paymentservice.consumer;
 
 import com.example.commonevents.inventory.InventoryReservedEvent;
+import com.example.paymentservice.entity.PaymentStatus;
 import com.example.paymentservice.service.InventoryReservedEventValidator;
 import com.example.paymentservice.service.PaymentEventProcessingService;
+import com.example.paymentservice.service.PaymentProcessingService;
+import com.example.paymentservice.service.model.PaymentInitializationResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -17,6 +20,9 @@ public class InventoryReservedConsumer {
 
     private final PaymentEventProcessingService
             paymentEventProcessingService;
+
+    private final PaymentProcessingService
+            paymentProcessingService;
 
     @KafkaListener(
             topics =
@@ -37,25 +43,38 @@ public class InventoryReservedConsumer {
 
         validator.validate(event);
 
-        boolean processed =
-                paymentEventProcessingService.process(
-                        event
-                );
+        PaymentInitializationResult initialization =
+                paymentEventProcessingService
+                        .initializePayment(event);
 
-        if (!processed) {
+        if (!initialization.created()) {
             log.info(
                     "InventoryReservedEvent already processed. " +
                             "orderId={}",
                     event.orderId()
             );
-
-            return;
+        } else {
+            log.info(
+                    "Pending payment created. " +
+                            "paymentId={}, orderId={}, amount={}",
+                    initialization.paymentId(),
+                    initialization.orderId(),
+                    event.totalAmount()
+            );
         }
 
+        PaymentStatus resultStatus =
+                paymentProcessingService
+                        .processPendingPayment(
+                                initialization.paymentId()
+                        );
+
         log.info(
-                "Pending payment created. orderId={}, amount={}",
-                event.orderId(),
-                event.totalAmount()
+                "Payment processing completed. " +
+                        "paymentId={}, orderId={}, status={}",
+                initialization.paymentId(),
+                initialization.orderId(),
+                resultStatus
         );
     }
 }
