@@ -1,6 +1,8 @@
 package com.example.orderservice.config;
 
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
+import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -8,10 +10,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.support.serializer.DelegatingByTypeSerializer;
 import org.springframework.kafka.support.serializer.JacksonJsonSerializer;
-import com.example.commonevents.order.OrderCreatedEvent;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Configuration
@@ -21,29 +23,57 @@ public class KafkaProducerConfig {
     private String bootstrapServers;
 
     @Bean
-    public ProducerFactory<String, OrderCreatedEvent> orderCreatedProducerFactory() {
-        Map<String, Object> properties = new HashMap<>();
+    public ProducerFactory<String, Object>
+    orderKafkaProducerFactory() {
+
+        Map<String, Object> properties =
+                new LinkedHashMap<>();
 
         properties.put(
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
                 bootstrapServers
         );
 
-        properties.put(
-                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
-                StringSerializer.class
+        Map<Class<?>, Serializer<?>> serializers =
+                new LinkedHashMap<>();
+
+        /*
+         * Deserialization hatasıyla DLT'ye giden
+         * orijinal ham mesajlar için.
+         */
+        serializers.put(
+                byte[].class,
+                new ByteArraySerializer()
         );
 
-        properties.put(
-                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
-                JacksonJsonSerializer.class
+        /*
+         * OrderCreatedEvent ve diğer normal Java
+         * event nesneleri için.
+         */
+        serializers.put(
+                Object.class,
+                new JacksonJsonSerializer<>()
         );
 
-        return new DefaultKafkaProducerFactory<>(properties);
+        DelegatingByTypeSerializer valueSerializer =
+                new DelegatingByTypeSerializer(
+                        serializers,
+                        true
+                );
+
+        return new DefaultKafkaProducerFactory<>(
+                properties,
+                new StringSerializer(),
+                valueSerializer
+        );
     }
 
     @Bean
-    public KafkaTemplate<String, OrderCreatedEvent> orderCreatedKafkaTemplate() {
-        return new KafkaTemplate<>(orderCreatedProducerFactory());
+    public KafkaTemplate<String, Object>
+    orderKafkaTemplate() {
+
+        return new KafkaTemplate<>(
+                orderKafkaProducerFactory()
+        );
     }
 }
