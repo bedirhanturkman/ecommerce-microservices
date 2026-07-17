@@ -1,37 +1,59 @@
 package com.example.orderservice.producer;
 
 import com.example.commonevents.order.OrderCreatedEvent;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class OrderProducer {
 
-    private static final String ORDER_CREATED_TOPIC = "order-created";
+    private final KafkaTemplate<String, Object>
+            orderKafkaTemplate;
 
-    private final KafkaTemplate<String, OrderCreatedEvent> kafkaTemplate;
+    private final String orderCreatedTopic;
 
-    public void publishOrderCreatedEvent(OrderCreatedEvent event) {
-        kafkaTemplate.send(
-                ORDER_CREATED_TOPIC,
+    public OrderProducer(
+            @Qualifier("orderKafkaTemplate")
+            KafkaTemplate<String, Object>
+                    orderKafkaTemplate,
+
+            @Value("${order.kafka.topics.order-created}")
+            String orderCreatedTopic
+    ) {
+        this.orderKafkaTemplate =
+                orderKafkaTemplate;
+
+        this.orderCreatedTopic =
+                orderCreatedTopic;
+    }
+
+    public void publishOrderCreatedEvent(
+            OrderCreatedEvent event
+    ) {
+        orderKafkaTemplate.send(
+                orderCreatedTopic,
                 String.valueOf(event.orderId()),
                 event
         ).whenComplete((result, exception) -> {
+
             if (exception != null) {
                 log.error(
-                        "OrderCreatedEvent could not be published. orderId={}",
+                        "OrderCreatedEvent could not be published. "
+                                + "orderId={}",
                         event.orderId(),
                         exception
                 );
+
                 return;
             }
 
             log.info(
-                    "OrderCreatedEvent published. orderId={}, partition={}, offset={}",
+                    "OrderCreatedEvent published. "
+                            + "orderId={}, partition={}, offset={}",
                     event.orderId(),
                     result.getRecordMetadata().partition(),
                     result.getRecordMetadata().offset()

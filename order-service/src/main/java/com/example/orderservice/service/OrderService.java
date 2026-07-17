@@ -8,10 +8,11 @@ import com.example.orderservice.dto.ProductResponse;
 import com.example.orderservice.entity.Order;
 import com.example.orderservice.entity.OrderItem;
 import com.example.orderservice.entity.OrderStatus;
+import com.example.orderservice.event.OrderCreatedInternalEvent;
 import com.example.orderservice.mapper.OrderEventMapper;
 import com.example.orderservice.mapper.OrderMapper;
-import com.example.orderservice.producer.OrderProducer;
 import com.example.orderservice.repository.OrderRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,21 +26,21 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
     private final ProductClient productClient;
-    private final OrderProducer orderProducer;
     private final OrderEventMapper orderEventMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     public OrderService(
             OrderRepository orderRepository,
             OrderMapper orderMapper,
             ProductClient productClient,
-            OrderProducer orderProducer,
-            OrderEventMapper orderEventMapper
+            OrderEventMapper orderEventMapper,
+            ApplicationEventPublisher eventPublisher
     ) {
         this.orderRepository = orderRepository;
         this.orderMapper = orderMapper;
         this.productClient = productClient;
-        this.orderProducer = orderProducer;
         this.orderEventMapper = orderEventMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -56,23 +57,38 @@ public class OrderService {
 
         List<OrderItem> orderItems = request.items()
                 .stream()
-                .map(itemRequest -> createOrderItem(order, itemRequest, authorizationHeader))
+                .map(
+                        itemRequest -> createOrderItem(
+                                order,
+                                itemRequest,
+                                authorizationHeader
+                        )
+                )
                 .toList();
 
         BigDecimal totalPrice = orderItems.stream()
                 .map(OrderItem::getTotalPrice)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                .reduce(
+                        BigDecimal.ZERO,
+                        BigDecimal::add
+                );
 
         order.getItems().addAll(orderItems);
         order.setTotalPrice(totalPrice);
 
-        Order savedOrder = orderRepository.save(order);
+        Order savedOrder =
+                orderRepository.save(order);
 
-        orderProducer.publishOrderCreatedEvent(
-                orderEventMapper.toOrderCreatedEvent(savedOrder)
+        eventPublisher.publishEvent(
+                new OrderCreatedInternalEvent(
+                        orderEventMapper
+                                .toOrderCreatedEvent(savedOrder)
+                )
         );
 
-        return orderMapper.toOrderResponse(savedOrder);
+        return orderMapper.toOrderResponse(
+                savedOrder
+        );
     }
 
     private OrderItem createOrderItem(
@@ -80,14 +96,18 @@ public class OrderService {
             CreateOrderItemRequest itemRequest,
             String authorizationHeader
     ) {
-        ProductResponse product = productClient.getProductById(
-                itemRequest.productId(),
-                authorizationHeader
-        );
+        ProductResponse product =
+                productClient.getProductById(
+                        itemRequest.productId(),
+                        authorizationHeader
+                );
 
-        BigDecimal totalPrice = product.price().multiply(
-                BigDecimal.valueOf(itemRequest.quantity())
-        );
+        BigDecimal totalPrice =
+                product.price().multiply(
+                        BigDecimal.valueOf(
+                                itemRequest.quantity()
+                        )
+                );
 
         return OrderItem.builder()
                 .order(order)
