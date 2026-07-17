@@ -5,11 +5,7 @@ import com.example.commonevents.order.OrderCreatedItemEvent;
 import com.example.inventoryservice.entity.Inventory;
 import com.example.inventoryservice.entity.InventoryReservation;
 import com.example.inventoryservice.entity.ReservationStatus;
-import com.example.inventoryservice.exception.ActiveReservationNotFoundException;
-import com.example.inventoryservice.exception.InsufficientStockException;
-import com.example.inventoryservice.exception.InvalidStockQuantityException;
-import com.example.inventoryservice.exception.InventoryNotFoundException;
-import com.example.inventoryservice.exception.ReservationAlreadyExistsException;
+import com.example.inventoryservice.exception.*;
 import com.example.inventoryservice.repository.InventoryRepository;
 import com.example.inventoryservice.repository.InventoryReservationRepository;
 import com.example.inventoryservice.service.model.ReservationResult;
@@ -128,94 +124,188 @@ public class ReservationService {
     }
 
     @Transactional
-    public void confirmReservation(Long orderId) {
-
+    public boolean confirmReservation(
+            Long orderId
+    ) {
         List<InventoryReservation> reservations =
-                findActiveReservations(orderId);
+                reservationRepository
+                        .findAllByOrderIdForUpdate(orderId);
 
-        Instant now = Instant.now();
+        validateReservationsExist(
+                orderId,
+                reservations
+        );
 
-        List<Inventory> inventoriesToUpdate =
-                new ArrayList<>();
+        ReservationStatus currentStatus =
+                resolveCommonStatus(
+                        orderId,
+                        reservations
+                );
 
-        for (InventoryReservation reservation : reservations) {
+        if (currentStatus == ReservationStatus.CONFIRMED) {
+            return false;
+        }
+
+        if (currentStatus == ReservationStatus.RELEASED) {
+            throw new ReservationStateConflictException(
+                    orderId,
+                    ReservationStatus.RELEASED,
+                    ReservationStatus.CONFIRMED
+            );
+        }
+
+        Instant confirmedAt = Instant.now();
+
+        for (InventoryReservation reservation
+                : reservations) {
 
             Inventory inventory =
-                    findInventory(reservation.getProductId());
+                    inventoryRepository
+                            .findByProductIdForUpdate(
+                                    reservation.getProductId()
+                            )
+                            .orElseThrow(
+                                    () -> new InventoryNotFoundException(
+                                            reservation.getProductId()
+                                    )
+                            );
 
-            int reservedQuantity =
+            int reservationQuantity =
+                    reservation.getQuantity();
+
+            int currentQuantity =
+                    inventory.getQuantity();
+
+            int currentReservedQuantity =
                     getReservedQuantity(inventory);
 
-            if (reservedQuantity < reservation.getQuantity()) {
-                throw new ActiveReservationNotFoundException(
-                        orderId
+            if (currentQuantity < reservationQuantity) {
+                throw new IllegalStateException(
+                        "Inventory quantity cannot be lower "
+                                + "than reservation quantity. productId="
+                                + reservation.getProductId()
+                );
+            }
+
+            if (currentReservedQuantity
+                    < reservationQuantity) {
+
+                throw new IllegalStateException(
+                        "Reserved quantity cannot be lower "
+                                + "than reservation quantity. productId="
+                                + reservation.getProductId()
                 );
             }
 
             inventory.setQuantity(
-                    inventory.getQuantity()
-                            - reservation.getQuantity()
+                    currentQuantity
+                            - reservationQuantity
             );
 
             inventory.setReservedQuantity(
-                    reservedQuantity
-                            - reservation.getQuantity()
+                    currentReservedQuantity
+                            - reservationQuantity
             );
 
             reservation.setStatus(
                     ReservationStatus.CONFIRMED
             );
 
-            reservation.setConfirmedAt(now);
-
-            inventoriesToUpdate.add(inventory);
+            reservation.setConfirmedAt(
+                    confirmedAt
+            );
         }
 
-        inventoryRepository.saveAll(inventoriesToUpdate);
-        reservationRepository.saveAll(reservations);
+        /*
+         * Reservation ve Inventory entity'leri managed durumda.
+         * Transaction commit sırasında dirty checking ile
+         * değişiklikler otomatik yazılır.
+         */
+        return true;
     }
 
     @Transactional
-    public void releaseReservation(Long orderId) {
-
+    public boolean releaseReservation(
+            Long orderId
+    ) {
         List<InventoryReservation> reservations =
-                findActiveReservations(orderId);
+                reservationRepository
+                        .findAllByOrderIdForUpdate(orderId);
 
-        Instant now = Instant.now();
+        validateReservationsExist(
+                orderId,
+                reservations
+        );
 
-        List<Inventory> inventoriesToUpdate =
-                new ArrayList<>();
+        ReservationStatus currentStatus =
+                resolveCommonStatus(
+                        orderId,
+                        reservations
+                );
 
-        for (InventoryReservation reservation : reservations) {
+        if (currentStatus == ReservationStatus.RELEASED) {
+            return false;
+        }
+
+        if (currentStatus == ReservationStatus.CONFIRMED) {
+            throw new ReservationStateConflictException(
+                    orderId,
+                    ReservationStatus.CONFIRMED,
+                    ReservationStatus.RELEASED
+            );
+        }
+
+        Instant releasedAt = Instant.now();
+
+        for (InventoryReservation reservation
+                : reservations) {
 
             Inventory inventory =
-                    findInventory(reservation.getProductId());
+                    inventoryRepository
+                            .findByProductIdForUpdate(
+                                    reservation.getProductId()
+                            )
+                            .orElseThrow(
+                                    () -> new InventoryNotFoundException(
+                                            reservation.getProductId()
+                                    )
+                            );
 
-            int reservedQuantity =
+            int reservationQuantity =
+                    reservation.getQuantity();
+
+            int currentReservedQuantity =
                     getReservedQuantity(inventory);
 
-            if (reservedQuantity < reservation.getQuantity()) {
-                throw new ActiveReservationNotFoundException(
-                        orderId
+            if (currentReservedQuantity
+                    < reservationQuantity) {
+
+                throw new IllegalStateException(
+                        "Reserved quantity cannot be lower "
+                                + "than reservation quantity. productId="
+                                + reservation.getProductId()
                 );
             }
 
+            /*
+             * Release işleminde gerçek quantity azalmaz.
+             * Yalnızca ayrılmış miktar serbest bırakılır.
+             */
             inventory.setReservedQuantity(
-                    reservedQuantity
-                            - reservation.getQuantity()
+                    currentReservedQuantity
+                            - reservationQuantity
             );
 
             reservation.setStatus(
                     ReservationStatus.RELEASED
             );
 
-            reservation.setReleasedAt(now);
-
-            inventoriesToUpdate.add(inventory);
+            reservation.setReleasedAt(
+                    releasedAt
+            );
         }
 
-        inventoryRepository.saveAll(inventoriesToUpdate);
-        reservationRepository.saveAll(reservations);
+        return true;
     }
 
     private List<InventoryReservation> findActiveReservations(
@@ -273,5 +363,44 @@ public class ReservationService {
                     "Reservation quantity must be greater than zero"
             );
         }
+    }
+
+    private void validateReservationsExist(
+            Long orderId,
+            List<InventoryReservation> reservations
+    ) {
+        if (reservations == null
+                || reservations.isEmpty()) {
+
+            throw new ActiveReservationNotFoundException(
+                    orderId
+            );
+        }
+    }
+
+    private ReservationStatus resolveCommonStatus(
+            Long orderId,
+            List<InventoryReservation> reservations
+    ) {
+        ReservationStatus firstStatus =
+                reservations.getFirst().getStatus();
+
+        boolean sameStatus =
+                reservations.stream()
+                        .allMatch(
+                                reservation ->
+                                        reservation.getStatus()
+                                                == firstStatus
+                        );
+
+        if (!sameStatus) {
+            throw new IllegalStateException(
+                    "Reservation records have inconsistent statuses. "
+                            + "orderId="
+                            + orderId
+            );
+        }
+
+        return firstStatus;
     }
 }

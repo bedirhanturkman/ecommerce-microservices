@@ -30,6 +30,8 @@ inventory:
     topics:
       reserved: ${INVENTORY_RESERVED_TOPIC:inventory-reserved}
       reservation-failed: ${INVENTORY_RESERVATION_FAILED_TOPIC:inventory-reservation-failed}
+      payment-succeeded: ${PAYMENT_SUCCEEDED_TOPIC:payment-succeeded}
+      payment-failed: ${PAYMENT_FAILED_TOPIC:payment-failed}
 
     retry:
       interval-ms: 2000
