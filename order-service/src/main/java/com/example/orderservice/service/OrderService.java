@@ -1,5 +1,6 @@
 package com.example.orderservice.service;
 
+import com.example.commonevents.order.OrderCreatedEvent;
 import com.example.orderservice.client.ProductClient;
 import com.example.orderservice.dto.CreateOrderItemRequest;
 import com.example.orderservice.dto.CreateOrderRequest;
@@ -8,11 +9,10 @@ import com.example.orderservice.dto.ProductResponse;
 import com.example.orderservice.entity.Order;
 import com.example.orderservice.entity.OrderItem;
 import com.example.orderservice.entity.OrderStatus;
-import com.example.orderservice.event.OrderCreatedInternalEvent;
 import com.example.orderservice.mapper.OrderEventMapper;
 import com.example.orderservice.mapper.OrderMapper;
+import com.example.orderservice.outbox.OrderOutboxService;
 import com.example.orderservice.repository.OrderRepository;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,20 +27,21 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final ProductClient productClient;
     private final OrderEventMapper orderEventMapper;
-    private final ApplicationEventPublisher eventPublisher;
+    private final OrderOutboxService orderOutboxService;
 
     public OrderService(
             OrderRepository orderRepository,
             OrderMapper orderMapper,
             ProductClient productClient,
             OrderEventMapper orderEventMapper,
-            ApplicationEventPublisher eventPublisher
+            OrderOutboxService orderOutboxService
     ) {
         this.orderRepository = orderRepository;
         this.orderMapper = orderMapper;
         this.productClient = productClient;
         this.orderEventMapper = orderEventMapper;
-        this.eventPublisher = eventPublisher;
+        this.orderOutboxService =
+                orderOutboxService;
     }
 
     @Transactional
@@ -49,42 +50,68 @@ public class OrderService {
             String authorizationHeader
     ) {
         Order order = Order.builder()
-                .customerId(request.customerId())
-                .status(OrderStatus.CREATED)
-                .createdAt(LocalDateTime.now())
-                .totalPrice(BigDecimal.ZERO)
+                .customerId(
+                        request.customerId()
+                )
+                .status(
+                        OrderStatus.CREATED
+                )
+                .createdAt(
+                        LocalDateTime.now()
+                )
+                .totalPrice(
+                        BigDecimal.ZERO
+                )
                 .build();
 
-        List<OrderItem> orderItems = request.items()
-                .stream()
-                .map(
-                        itemRequest -> createOrderItem(
-                                order,
-                                itemRequest,
-                                authorizationHeader
+        List<OrderItem> orderItems =
+                request.items()
+                        .stream()
+                        .map(
+                                itemRequest ->
+                                        createOrderItem(
+                                                order,
+                                                itemRequest,
+                                                authorizationHeader
+                                        )
                         )
-                )
-                .toList();
+                        .toList();
 
-        BigDecimal totalPrice = orderItems.stream()
-                .map(OrderItem::getTotalPrice)
-                .reduce(
-                        BigDecimal.ZERO,
-                        BigDecimal::add
-                );
+        BigDecimal totalPrice =
+                orderItems.stream()
+                        .map(
+                                OrderItem::getTotalPrice
+                        )
+                        .reduce(
+                                BigDecimal.ZERO,
+                                BigDecimal::add
+                        );
 
-        order.getItems().addAll(orderItems);
-        order.setTotalPrice(totalPrice);
+        order.getItems().addAll(
+                orderItems
+        );
+
+        order.setTotalPrice(
+                totalPrice
+        );
 
         Order savedOrder =
                 orderRepository.save(order);
 
-        eventPublisher.publishEvent(
-                new OrderCreatedInternalEvent(
-                        orderEventMapper
-                                .toOrderCreatedEvent(savedOrder)
-                )
-        );
+        OrderCreatedEvent orderCreatedEvent =
+                orderEventMapper
+                        .toOrderCreatedEvent(
+                                savedOrder
+                        );
+
+        /*
+         * Order ve Outbox kaydı aynı PostgreSQL
+         * transaction içerisinde oluşturulur.
+         */
+        orderOutboxService
+                .saveOrderCreatedEvent(
+                        orderCreatedEvent
+                );
 
         return orderMapper.toOrderResponse(
                 savedOrder
@@ -113,7 +140,9 @@ public class OrderService {
                 .order(order)
                 .productId(product.id())
                 .productName(product.name())
-                .quantity(itemRequest.quantity())
+                .quantity(
+                        itemRequest.quantity()
+                )
                 .unitPrice(product.price())
                 .totalPrice(totalPrice)
                 .build();
