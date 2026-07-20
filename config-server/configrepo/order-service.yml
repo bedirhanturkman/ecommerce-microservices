@@ -37,3 +37,16 @@ order:
     retry:
       interval-ms: 2000
       max-retries: 2
+
+    producer:
+      max-block-ms: ${ORDER_KAFKA_MAX_BLOCK_MS:3000}
+      request-timeout-ms: ${ORDER_KAFKA_REQUEST_TIMEOUT_MS:3000}
+      delivery-timeout-ms: ${ORDER_KAFKA_DELIVERY_TIMEOUT_MS:8000}
+
+  outbox:
+    publisher:
+      fixed-delay-ms: ${ORDER_OUTBOX_FIXED_DELAY_MS:2000}
+      initial-delay-ms: ${ORDER_OUTBOX_INITIAL_DELAY_MS:3000}
+      batch-size: ${ORDER_OUTBOX_BATCH_SIZE:20}
+      send-timeout-seconds: ${ORDER_OUTBOX_SEND_TIMEOUT_SECONDS:10}
+      retry-delay-ms: ${ORDER_OUTBOX_RETRY_DELAY_MS:5000}
