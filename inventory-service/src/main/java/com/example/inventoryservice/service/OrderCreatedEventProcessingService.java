@@ -1,10 +1,10 @@
 package com.example.inventoryservice.service;
 
+import com.example.commonevents.inventory.InventoryReservedEvent;
 import com.example.commonevents.order.OrderCreatedEvent;
-import com.example.inventoryservice.event.internal.InventoryReservationCompletedEvent;
+import com.example.inventoryservice.outbox.InventoryOutboxService;
 import com.example.inventoryservice.service.model.ReservationResult;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,13 +13,22 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderCreatedEventProcessingService {
 
     private final ReservationService reservationService;
+
     private final ProcessedEventService processedEventService;
-    private final ApplicationEventPublisher applicationEventPublisher;
+
+    private final InventoryOutboxService inventoryOutboxService;
 
     @Transactional
-    public boolean process(OrderCreatedEvent event) {
-
-        if (processedEventService.isProcessed(event.orderId())) {
+    public boolean process(
+            OrderCreatedEvent event
+    ) {
+        /*
+         * Aynı OrderCreatedEvent daha önce başarıyla
+         * işlendiyse stok rezervasyonu tekrar yapılmaz.
+         */
+        if (processedEventService.isProcessed(
+                event.orderId()
+        )) {
             return false;
         }
 
@@ -29,18 +38,31 @@ public class OrderCreatedEventProcessingService {
                         event.items()
                 );
 
-        processedEventService.markAsProcessed(
-                event.orderId()
-        );
-
-        applicationEventPublisher.publishEvent(
-                new InventoryReservationCompletedEvent(
+        InventoryReservedEvent inventoryReservedEvent =
+                new InventoryReservedEvent(
                         event.orderId(),
                         event.customerId(),
                         event.totalPrice(),
                         result.reservedItems(),
                         result.reservedAt()
-                )
+                );
+
+        /*
+         * InventoryReservedEvent doğrudan Kafka'ya
+         * gönderilmez. Aynı database transaction
+         * içerisinde Outbox'a PENDING olarak yazılır.
+         */
+        inventoryOutboxService
+                .saveInventoryReservedEvent(
+                        inventoryReservedEvent
+                );
+
+        /*
+         * Processed event kaydı da aynı transaction
+         * içerisindedir.
+         */
+        processedEventService.markAsProcessed(
+                event.orderId()
         );
 
         return true;

@@ -12,7 +12,11 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-    show-sql: true
+
+    # Outbox scheduler belirli aralıklarla sorgu çalıştırdığı için
+    # sürekli Hibernate SQL logu oluşmasını engelliyoruz.
+    show-sql: false
+
     properties:
       hibernate:
         format_sql: true
@@ -21,18 +25,33 @@ spring:
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
     consumer:
-      group-id: inventory-service
+      group-id: ${INVENTORY_KAFKA_CONSUMER_GROUP:inventory-service}
       auto-offset-reset: latest
 
 inventory:
   kafka:
     topics:
+      order-created: ${ORDER_CREATED_TOPIC:order-created}
       reserved: ${INVENTORY_RESERVED_TOPIC:inventory-reserved}
       reservation-failed: ${INVENTORY_RESERVATION_FAILED_TOPIC:inventory-reservation-failed}
       payment-succeeded: ${PAYMENT_SUCCEEDED_TOPIC:payment-succeeded}
       payment-failed: ${PAYMENT_FAILED_TOPIC:payment-failed}
 
     retry:
-      interval-ms: 2000
-      max-retries: 2
+      interval-ms: ${INVENTORY_KAFKA_RETRY_INTERVAL_MS:2000}
+      max-retries: ${INVENTORY_KAFKA_MAX_RETRIES:2}
+
+    producer:
+      max-block-ms: ${INVENTORY_KAFKA_MAX_BLOCK_MS:3000}
+      request-timeout-ms: ${INVENTORY_KAFKA_REQUEST_TIMEOUT_MS:3000}
+      delivery-timeout-ms: ${INVENTORY_KAFKA_DELIVERY_TIMEOUT_MS:8000}
+
+  outbox:
+    publisher:
+      fixed-delay-ms: ${INVENTORY_OUTBOX_FIXED_DELAY_MS:5000}
+      initial-delay-ms: ${INVENTORY_OUTBOX_INITIAL_DELAY_MS:3000}
+      batch-size: ${INVENTORY_OUTBOX_BATCH_SIZE:20}
+      send-timeout-seconds: ${INVENTORY_OUTBOX_SEND_TIMEOUT_SECONDS:10}
+      retry-delay-ms: ${INVENTORY_OUTBOX_RETRY_DELAY_MS:5000}

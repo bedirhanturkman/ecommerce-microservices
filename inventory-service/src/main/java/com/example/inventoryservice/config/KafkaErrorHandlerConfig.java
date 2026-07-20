@@ -1,5 +1,6 @@
 package com.example.inventoryservice.config;
 
+import com.example.commonevents.inventory.InventoryReservationFailedEvent;
 import com.example.commonevents.order.OrderCreatedEvent;
 import com.example.inventoryservice.exception.ActiveReservationNotFoundException;
 import com.example.inventoryservice.exception.InsufficientStockException;
@@ -8,7 +9,7 @@ import com.example.inventoryservice.exception.InvalidStockQuantityException;
 import com.example.inventoryservice.exception.InventoryNotFoundException;
 import com.example.inventoryservice.exception.ReservationAlreadyExistsException;
 import com.example.inventoryservice.mapper.InventoryReservationFailureEventFactory;
-import com.example.inventoryservice.producer.InventoryEventProducer;
+import com.example.inventoryservice.outbox.InventoryFailureOutboxService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -25,22 +26,31 @@ import org.springframework.util.backoff.FixedBackOff;
 @Configuration
 public class KafkaErrorHandlerConfig {
 
-    private static final String DLT_SUFFIX = "-dlt";
+    private static final String DLT_SUFFIX =
+            "-dlt";
 
-    private final KafkaTemplate<String, Object> inventoryKafkaTemplate;
-    private final InventoryEventProducer inventoryEventProducer;
-    private final InventoryReservationFailureEventFactory failureEventFactory;
+    private final KafkaTemplate<String, Object>
+            inventoryKafkaTemplate;
+
+    private final InventoryFailureOutboxService
+            inventoryFailureOutboxService;
+
+    private final InventoryReservationFailureEventFactory
+            failureEventFactory;
 
     private final long retryIntervalMs;
     private final long maxRetries;
 
     public KafkaErrorHandlerConfig(
             @Qualifier("inventoryKafkaTemplate")
-            KafkaTemplate<String, Object> inventoryKafkaTemplate,
+            KafkaTemplate<String, Object>
+                    inventoryKafkaTemplate,
 
-            InventoryEventProducer inventoryEventProducer,
+            InventoryFailureOutboxService
+                    inventoryFailureOutboxService,
 
-            InventoryReservationFailureEventFactory failureEventFactory,
+            InventoryReservationFailureEventFactory
+                    failureEventFactory,
 
             @Value("${inventory.kafka.retry.interval-ms}")
             long retryIntervalMs,
@@ -48,11 +58,20 @@ public class KafkaErrorHandlerConfig {
             @Value("${inventory.kafka.retry.max-retries}")
             long maxRetries
     ) {
-        this.inventoryKafkaTemplate = inventoryKafkaTemplate;
-        this.inventoryEventProducer = inventoryEventProducer;
-        this.failureEventFactory = failureEventFactory;
-        this.retryIntervalMs = retryIntervalMs;
-        this.maxRetries = maxRetries;
+        this.inventoryKafkaTemplate =
+                inventoryKafkaTemplate;
+
+        this.inventoryFailureOutboxService =
+                inventoryFailureOutboxService;
+
+        this.failureEventFactory =
+                failureEventFactory;
+
+        this.retryIntervalMs =
+                retryIntervalMs;
+
+        this.maxRetries =
+                maxRetries;
     }
 
     public DefaultErrorHandler createErrorHandler() {
@@ -67,41 +86,52 @@ public class KafkaErrorHandlerConfig {
                             findRootCause(exception);
 
                     log.error(
-                            "Kafka event recovery started. " +
-                                    "topic={}, partition={}, offset={}, " +
-                                    "exception={}, message={}",
+                            "Kafka event recovery started. "
+                                    + "topic={}, partition={}, offset={}, "
+                                    + "exception={}, message={}",
                             record.topic(),
                             record.partition(),
                             record.offset(),
-                            rootCause.getClass().getSimpleName(),
+                            rootCause.getClass()
+                                    .getSimpleName(),
                             rootCause.getMessage(),
                             exception
                     );
 
                     /*
-                     * Event deserialize edilebildiyse orderId bilgisine
-                     * ulaşabilir ve InventoryReservationFailedEvent
-                     * yayınlayabiliriz.
+                     * Mesaj OrderCreatedEvent olarak deserialize
+                     * edilebildiyse orderId bilgisine ulaşabiliriz.
                      *
-                     * Bozuk JSON durumunda record.value() bir
-                     * OrderCreatedEvent olmayacağı için yalnızca DLT'ye
-                     * gönderilir.
+                     * Reservation işlemi başarısız olduğu için asıl
+                     * transaction rollback olmuştur. Failure Outbox
+                     * kaydı REQUIRES_NEW transaction ile oluşturulur.
                      */
                     if (record.value()
-                            instanceof OrderCreatedEvent orderCreatedEvent) {
+                            instanceof OrderCreatedEvent
+                            orderCreatedEvent) {
 
-                        publishReservationFailureEvent(
+                        saveReservationFailureOutboxEvent(
                                 orderCreatedEvent,
                                 exception
                         );
 
                     } else {
+                        /*
+                         * Bozuk JSON gibi deserialization hatalarında
+                         * OrderCreatedEvent oluşmadığı için orderId
+                         * bilgisine erişemeyiz.
+                         *
+                         * Bu nedenle failure business event'i
+                         * oluşturulamaz; orijinal mesaj yalnızca
+                         * DLT'ye gönderilir.
+                         */
                         log.warn(
-                                "InventoryReservationFailedEvent could not " +
-                                        "be created because the Kafka value " +
-                                        "was not deserialized as an " +
-                                        "OrderCreatedEvent. " +
-                                        "topic={}, partition={}, offset={}",
+                                "InventoryReservationFailedEvent "
+                                        + "could not be created because "
+                                        + "the Kafka value was not "
+                                        + "deserialized as an "
+                                        + "OrderCreatedEvent. "
+                                        + "topic={}, partition={}, offset={}",
                                 record.topic(),
                                 record.partition(),
                                 record.offset()
@@ -109,8 +139,9 @@ public class KafkaErrorHandlerConfig {
                     }
 
                     /*
-                     * Failure event işleminden sonra orijinal Kafka
-                     * kaydını DLT'ye gönder.
+                     * Failure Outbox kaydı güvenli şekilde
+                     * oluşturulduktan sonra orijinal order-created
+                     * mesajını DLT'ye göndeririz.
                      */
                     dltRecoverer.accept(
                             record,
@@ -131,12 +162,9 @@ public class KafkaErrorHandlerConfig {
                 );
 
         /*
-         * Bunlar kalıcı business veya validation hatalarıdır.
-         * Tekrar denemek sonucu değiştirmeyeceği için doğrudan
-         * recoverer çalışır:
-         *
-         * 1. InventoryReservationFailedEvent yayınlanır.
-         * 2. Orijinal mesaj order-created-dlt'ye gönderilir.
+         * Kalıcı business veya validation hatalarıdır.
+         * Tekrar deneme sonucu değiştirmeyeceği için doğrudan
+         * recoverer çalışır.
          */
         errorHandler.addNotRetryableExceptions(
                 InvalidOrderCreatedEventException.class,
@@ -149,9 +177,8 @@ public class KafkaErrorHandlerConfig {
         );
 
         /*
-         * OptimisticLockingFailureException bu listeye özellikle
-         * eklenmedi. Eş zamanlı transaction kaynaklı olabileceği
-         * için retry uygulanmaya devam edecek.
+         * Optimistic locking ve geçici altyapı hataları bu
+         * listeye eklenmediği için retry edilebilir durumda kalır.
          */
         errorHandler.setRetryListeners(
                 (record, exception, deliveryAttempt) -> {
@@ -160,15 +187,16 @@ public class KafkaErrorHandlerConfig {
                             findRootCause(exception);
 
                     log.warn(
-                            "Kafka event processing failed. " +
-                                    "topic={}, partition={}, offset={}, " +
-                                    "deliveryAttempt={}, exception={}, " +
-                                    "message={}",
+                            "Kafka event processing failed. "
+                                    + "topic={}, partition={}, offset={}, "
+                                    + "deliveryAttempt={}, exception={}, "
+                                    + "message={}",
                             record.topic(),
                             record.partition(),
                             record.offset(),
                             deliveryAttempt,
-                            rootCause.getClass().getSimpleName(),
+                            rootCause.getClass()
+                                    .getSimpleName(),
                             rootCause.getMessage()
                     );
                 }
@@ -185,52 +213,58 @@ public class KafkaErrorHandlerConfig {
                         inventoryKafkaTemplate,
                         (record, exception) ->
                                 new TopicPartition(
-                                        record.topic() + DLT_SUFFIX,
+                                        record.topic()
+                                                + DLT_SUFFIX,
                                         record.partition()
                                 )
                 );
 
         /*
-         * DLT publish işlemi başarısız olursa recoverer'ın başarılı
-         * olmuş gibi davranmasını engeller.
+         * DLT publish başarısız olursa mesajın başarılı şekilde
+         * recover edilmiş kabul edilmesini engeller.
          */
-        recoverer.setFailIfSendResultIsError(true);
+        recoverer.setFailIfSendResultIsError(
+                true
+        );
 
         return recoverer;
     }
 
-    private void publishReservationFailureEvent(
+    private void saveReservationFailureOutboxEvent(
             OrderCreatedEvent event,
             Exception exception
     ) {
-        try {
-            inventoryEventProducer.publishReservationFailed(
-                    failureEventFactory.create(
-                            event,
-                            exception
-                    )
-            );
+        InventoryReservationFailedEvent failureEvent =
+                failureEventFactory.create(
+                        event,
+                        exception
+                );
 
-        } catch (RuntimeException publishException) {
+        inventoryFailureOutboxService
+                .saveFailureEvent(
+                        failureEvent
+                );
 
-            log.error(
-                    "InventoryReservationFailedEvent publish operation " +
-                            "could not be started. orderId={}",
-                    event.orderId(),
-                    publishException
-            );
-        }
+        log.info(
+                "InventoryReservationFailedEvent saved "
+                        + "to Outbox. orderId={}, errorCode={}",
+                failureEvent.orderId(),
+                failureEvent.errorCode()
+        );
     }
 
     private Throwable findRootCause(
             Throwable throwable
     ) {
-        Throwable rootCause = throwable;
+        Throwable rootCause =
+                throwable;
 
         while (rootCause.getCause() != null
-                && rootCause.getCause() != rootCause) {
+                && rootCause.getCause()
+                != rootCause) {
 
-            rootCause = rootCause.getCause();
+            rootCause =
+                    rootCause.getCause();
         }
 
         return rootCause;
