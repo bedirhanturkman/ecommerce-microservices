@@ -1,0 +1,137 @@
+package com.example.inventoryservice.outbox;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Optional;
+
+@Slf4j
+@Service
+public class InventoryOutboxMonitoringService {
+
+    private final InventoryOutboxEventRepository
+            outboxEventRepository;
+
+    private final int highRetryThreshold;
+
+    private final long
+            oldestPendingWarningSeconds;
+
+    public InventoryOutboxMonitoringService(
+            InventoryOutboxEventRepository
+                    outboxEventRepository,
+
+            @Value(
+                    "${inventory.outbox.monitoring.high-retry-threshold}"
+            )
+            int highRetryThreshold,
+
+            @Value(
+                    "${inventory.outbox.monitoring.oldest-pending-warning-seconds}"
+            )
+            long oldestPendingWarningSeconds
+    ) {
+        this.outboxEventRepository =
+                outboxEventRepository;
+
+        this.highRetryThreshold =
+                highRetryThreshold;
+
+        this.oldestPendingWarningSeconds =
+                oldestPendingWarningSeconds;
+    }
+
+    @Transactional(readOnly = true)
+    public InventoryOutboxHealthSnapshot
+    collectSnapshot() {
+
+        long pendingCount =
+                outboxEventRepository
+                        .countPendingEvents();
+
+        Optional<Instant> oldestPending =
+                outboxEventRepository
+                        .findOldestPendingCreatedAt();
+
+        long oldestPendingAgeSeconds =
+                oldestPending
+                        .map(this::calculateAgeSeconds)
+                        .orElse(0L);
+
+        long highRetryPendingCount =
+                outboxEventRepository
+                        .countPendingEventsWithHighRetry(
+                                highRetryThreshold
+                        );
+
+        return new InventoryOutboxHealthSnapshot(
+                pendingCount,
+                oldestPending.orElse(null),
+                oldestPendingAgeSeconds,
+                highRetryPendingCount
+        );
+    }
+
+    public void logSnapshot(
+            InventoryOutboxHealthSnapshot snapshot
+    ) {
+        if (snapshot.pendingCount() == 0) {
+            log.debug(
+                    "Inventory Outbox is healthy. pendingCount=0"
+            );
+
+            return;
+        }
+
+        boolean oldPendingExists =
+                snapshot.oldestPendingAgeSeconds()
+                        >= oldestPendingWarningSeconds;
+
+        boolean highRetryExists =
+                snapshot.highRetryPendingCount() > 0;
+
+        if (oldPendingExists || highRetryExists) {
+            log.warn(
+                    "Inventory Outbox requires attention. "
+                            + "pendingCount={}, "
+                            + "oldestPendingCreatedAt={}, "
+                            + "oldestPendingAgeSeconds={}, "
+                            + "highRetryPendingCount={}, "
+                            + "highRetryThreshold={}",
+                    snapshot.pendingCount(),
+                    snapshot.oldestPendingCreatedAt(),
+                    snapshot.oldestPendingAgeSeconds(),
+                    snapshot.highRetryPendingCount(),
+                    highRetryThreshold
+            );
+
+            return;
+        }
+
+        log.info(
+                "Inventory Outbox contains pending events. "
+                        + "pendingCount={}, "
+                        + "oldestPendingAgeSeconds={}, "
+                        + "highRetryPendingCount={}",
+                snapshot.pendingCount(),
+                snapshot.oldestPendingAgeSeconds(),
+                snapshot.highRetryPendingCount()
+        );
+    }
+
+    private long calculateAgeSeconds(
+            Instant createdAt
+    ) {
+        long ageSeconds =
+                Duration.between(
+                        createdAt,
+                        Instant.now()
+                ).toSeconds();
+
+        return Math.max(ageSeconds, 0L);
+    }
+}
