@@ -12,7 +12,8 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-    show-sql: true
+    show-sql: false
+
     properties:
       hibernate:
         format_sql: true
@@ -35,8 +36,8 @@ order:
       inventory-reservation-failed: ${INVENTORY_RESERVATION_FAILED_TOPIC:inventory-reservation-failed}
 
     retry:
-      interval-ms: 2000
-      max-retries: 2
+      interval-ms: ${ORDER_KAFKA_RETRY_INTERVAL_MS:2000}
+      max-retries: ${ORDER_KAFKA_MAX_RETRIES:2}
 
     producer:
       max-block-ms: ${ORDER_KAFKA_MAX_BLOCK_MS:3000}
@@ -45,8 +46,38 @@ order:
 
   outbox:
     publisher:
-      fixed-delay-ms: ${ORDER_OUTBOX_FIXED_DELAY_MS:2000}
+      fixed-delay-ms: ${ORDER_OUTBOX_FIXED_DELAY_MS:5000}
       initial-delay-ms: ${ORDER_OUTBOX_INITIAL_DELAY_MS:3000}
       batch-size: ${ORDER_OUTBOX_BATCH_SIZE:20}
       send-timeout-seconds: ${ORDER_OUTBOX_SEND_TIMEOUT_SECONDS:10}
       retry-delay-ms: ${ORDER_OUTBOX_RETRY_DELAY_MS:5000}
+
+    maintenance:
+      enabled: ${ORDER_OUTBOX_MAINTENANCE_ENABLED:true}
+
+      # Normal kullanımda saatte bir bakım yapılır.
+      fixed-delay-ms: ${ORDER_OUTBOX_MAINTENANCE_FIXED_DELAY_MS:3600000}
+
+      # Servis başladıktan bir dakika sonra ilk bakım yapılır.
+      initial-delay-ms: ${ORDER_OUTBOX_MAINTENANCE_INITIAL_DELAY_MS:60000}
+
+      # Yedi günden eski PUBLISHED kayıtlar temizlenir.
+      retention-days: ${ORDER_OUTBOX_RETENTION_DAYS:7}
+
+      # Her bakım döngüsünde en fazla 500 kayıt silinir.
+      cleanup-batch-size: ${ORDER_OUTBOX_CLEANUP_BATCH_SIZE:500}
+
+    monitoring:
+      enabled: ${ORDER_OUTBOX_MONITORING_ENABLED:true}
+
+      # Outbox durumu dakikada bir kontrol edilir.
+      fixed-delay-ms: ${ORDER_OUTBOX_MONITORING_FIXED_DELAY_MS:60000}
+
+      # Servis başladıktan 15 saniye sonra ilk kontrol yapılır.
+      initial-delay-ms: ${ORDER_OUTBOX_MONITORING_INITIAL_DELAY_MS:15000}
+
+      # Üç veya daha fazla retry alan PENDING kayıtlar uyarı üretir.
+      high-retry-threshold: ${ORDER_OUTBOX_HIGH_RETRY_THRESHOLD:3}
+
+      # Altmış saniyeden uzun süre bekleyen PENDING event uyarı üretir.
+      oldest-pending-warning-seconds: ${ORDER_OUTBOX_OLDEST_PENDING_WARNING_SECONDS:60}

@@ -13,8 +13,8 @@ spring:
       ddl-auto: validate
     open-in-view: false
 
-    # Outbox scheduler belirli aralıklarla sorgu çalıştırdığı için
-    # sürekli Hibernate SQL logu oluşmasını engelliyoruz.
+    # Publisher, maintenance ve monitoring scheduler'ları
+    # düzenli sorgu çalıştırdığı için SQL loglarını kapatıyoruz.
     show-sql: false
 
     properties:
@@ -55,3 +55,35 @@ inventory:
       batch-size: ${INVENTORY_OUTBOX_BATCH_SIZE:20}
       send-timeout-seconds: ${INVENTORY_OUTBOX_SEND_TIMEOUT_SECONDS:10}
       retry-delay-ms: ${INVENTORY_OUTBOX_RETRY_DELAY_MS:5000}
+
+    maintenance:
+      enabled: ${INVENTORY_OUTBOX_MAINTENANCE_ENABLED:true}
+
+      # Normal kullanımda saatte bir bakım yapılır.
+      fixed-delay-ms: ${INVENTORY_OUTBOX_MAINTENANCE_FIXED_DELAY_MS:3600000}
+
+      # Servis başladıktan bir dakika sonra ilk bakım yapılır.
+      initial-delay-ms: ${INVENTORY_OUTBOX_MAINTENANCE_INITIAL_DELAY_MS:60000}
+
+      # Yedi günden eski PUBLISHED kayıtlar temizlenir.
+      retention-days: ${INVENTORY_OUTBOX_RETENTION_DAYS:7}
+
+      # Her bakım döngüsünde en fazla 500 kayıt silinir.
+      cleanup-batch-size: ${INVENTORY_OUTBOX_CLEANUP_BATCH_SIZE:500}
+
+    monitoring:
+      enabled: ${INVENTORY_OUTBOX_MONITORING_ENABLED:true}
+
+      # Outbox durumu dakikada bir kontrol edilir.
+      fixed-delay-ms: ${INVENTORY_OUTBOX_MONITORING_FIXED_DELAY_MS:60000}
+
+      # Servis başladıktan 15 saniye sonra ilk kontrol yapılır.
+      initial-delay-ms: ${INVENTORY_OUTBOX_MONITORING_INITIAL_DELAY_MS:15000}
+
+      # Üç veya daha fazla retry alan PENDING kayıtlar
+      # uyarı üretir.
+      high-retry-threshold: ${INVENTORY_OUTBOX_HIGH_RETRY_THRESHOLD:3}
+
+      # Altmış saniyeden uzun süre bekleyen PENDING
+      # event uyarı üretir.
+      oldest-pending-warning-seconds: ${INVENTORY_OUTBOX_OLDEST_PENDING_WARNING_SECONDS:60}
