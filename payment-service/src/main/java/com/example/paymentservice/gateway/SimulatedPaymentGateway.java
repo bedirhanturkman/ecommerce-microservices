@@ -14,11 +14,12 @@ public class SimulatedPaymentGateway
 
     public SimulatedPaymentGateway(
             @Value(
-                    "${payment.processing.simulation.failure-threshold}"
+                    "${payment.processing.simulation.failure-threshold:100000}"
             )
             BigDecimal failureThreshold
     ) {
-        this.failureThreshold = failureThreshold;
+        this.failureThreshold =
+                failureThreshold;
     }
 
     @Override
@@ -27,7 +28,10 @@ public class SimulatedPaymentGateway
             Long customerId,
             BigDecimal amount
     ) {
-        if (amount.compareTo(failureThreshold) >= 0) {
+        if (amount.compareTo(
+                failureThreshold
+        ) >= 0) {
+
             return PaymentGatewayResult.failure(
                     PaymentFailureCode.PAYMENT_DECLINED,
                     "Payment was declined by the simulated payment gateway"

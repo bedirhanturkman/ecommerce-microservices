@@ -1,16 +1,16 @@
 package com.example.paymentservice.service;
 
+import com.example.commonevents.payment.PaymentFailedEvent;
+import com.example.commonevents.payment.PaymentSucceededEvent;
 import com.example.paymentservice.entity.Payment;
 import com.example.paymentservice.entity.PaymentStatus;
-import com.example.paymentservice.event.internal.PaymentFailedInternalEvent;
-import com.example.paymentservice.event.internal.PaymentSucceededInternalEvent;
 import com.example.paymentservice.exception.PaymentNotFoundException;
 import com.example.paymentservice.gateway.PaymentGateway;
 import com.example.paymentservice.gateway.PaymentGatewayResult;
+import com.example.paymentservice.outbox.PaymentOutboxService;
 import com.example.paymentservice.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,9 +25,11 @@ public class PaymentProcessingService {
             500;
 
     private final PaymentRepository paymentRepository;
+
     private final PaymentGateway paymentGateway;
-    private final ApplicationEventPublisher
-            applicationEventPublisher;
+
+    private final PaymentOutboxService
+            paymentOutboxService;
 
     @Transactional
     public PaymentStatus processPendingPayment(
@@ -41,12 +43,17 @@ public class PaymentProcessingService {
                                         .byPaymentId(paymentId)
                         );
 
+        /*
+         * Aynı InventoryReservedEvent tekrar geldiğinde
+         * ödeme ikinci kez alınmaz ve yeni Outbox kaydı
+         * oluşturulmaz.
+         */
         if (payment.getStatus()
                 != PaymentStatus.PENDING) {
 
             log.info(
-                    "Payment already completed. " +
-                            "paymentId={}, orderId={}, status={}",
+                    "Payment already completed. "
+                            + "paymentId={}, orderId={}, status={}",
                     payment.getId(),
                     payment.getOrderId(),
                     payment.getStatus()
@@ -55,6 +62,11 @@ public class PaymentProcessingService {
             return payment.getStatus();
         }
 
+        /*
+         * Gateway teknik exception fırlatırsa transaction
+         * rollback olur. Payment PENDING kalır ve Kafka
+         * consumer retry işlemini gerçekleştirebilir.
+         */
         PaymentGatewayResult result =
                 paymentGateway.charge(
                         payment.getOrderId(),
@@ -62,7 +74,8 @@ public class PaymentProcessingService {
                         payment.getAmount()
                 );
 
-        Instant completedAt = Instant.now();
+        Instant completedAt =
+                Instant.now();
 
         if (result.successful()) {
             completeSuccessfully(
@@ -70,19 +83,23 @@ public class PaymentProcessingService {
                     completedAt
             );
 
-            /*
-             * payment managed entity olduğu için ayrıca
-             * save veya saveAndFlush çağrısı gerekmiyor.
-             */
-            applicationEventPublisher.publishEvent(
-                    new PaymentSucceededInternalEvent(
+            PaymentSucceededEvent succeededEvent =
+                    new PaymentSucceededEvent(
                             payment.getId(),
                             payment.getOrderId(),
                             payment.getCustomerId(),
                             payment.getAmount(),
                             completedAt
-                    )
-            );
+                    );
+
+            /*
+             * Payment SUCCEEDED değişikliği ve success
+             * Outbox kaydı aynı transaction içindedir.
+             */
+            paymentOutboxService
+                    .savePaymentSucceededEvent(
+                            succeededEvent
+                    );
 
             return PaymentStatus.SUCCEEDED;
         }
@@ -93,8 +110,8 @@ public class PaymentProcessingService {
                 completedAt
         );
 
-        applicationEventPublisher.publishEvent(
-                new PaymentFailedInternalEvent(
+        PaymentFailedEvent failedEvent =
+                new PaymentFailedEvent(
                         payment.getId(),
                         payment.getOrderId(),
                         payment.getCustomerId(),
@@ -102,8 +119,17 @@ public class PaymentProcessingService {
                         payment.getFailureCode(),
                         payment.getFailureReason(),
                         completedAt
-                )
-        );
+                );
+
+        /*
+         * Business decline exception değildir.
+         * Payment FAILED ve failure Outbox kaydı birlikte
+         * commit edilir.
+         */
+        paymentOutboxService
+                .savePaymentFailedEvent(
+                        failedEvent
+                );
 
         return PaymentStatus.FAILED;
     }
@@ -140,7 +166,9 @@ public class PaymentProcessingService {
                 )
         );
 
-        payment.setCompletedAt(completedAt);
+        payment.setCompletedAt(
+                completedAt
+        );
     }
 
     private String limitFailureReason(

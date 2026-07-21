@@ -12,7 +12,11 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-    show-sql: true
+
+    # Outbox scheduler düzenli sorgu çalıştırdığı için
+    # sürekli Hibernate SQL logu oluşmasını engelliyoruz.
+    show-sql: false
+
     properties:
       hibernate:
         format_sql: true
@@ -21,11 +25,16 @@ spring:
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
     consumer:
-      group-id: payment-service
+      group-id: ${PAYMENT_KAFKA_CONSUMER_GROUP:payment-service}
       auto-offset-reset: latest
 
 payment:
+  processing:
+    simulation:
+      failure-threshold: ${PAYMENT_FAILURE_THRESHOLD:100000}
+
   kafka:
     topics:
       inventory-reserved: ${INVENTORY_RESERVED_TOPIC:inventory-reserved}
@@ -33,9 +42,18 @@ payment:
       failed: ${PAYMENT_FAILED_TOPIC:payment-failed}
 
     retry:
-      interval-ms: 2000
-      max-retries: 2
+      interval-ms: ${PAYMENT_KAFKA_RETRY_INTERVAL_MS:2000}
+      max-retries: ${PAYMENT_KAFKA_MAX_RETRIES:2}
 
-  processing:
-    simulation:
-      failure-threshold: ${PAYMENT_FAILURE_THRESHOLD:100000.00}
+    producer:
+      max-block-ms: ${PAYMENT_KAFKA_MAX_BLOCK_MS:3000}
+      request-timeout-ms: ${PAYMENT_KAFKA_REQUEST_TIMEOUT_MS:3000}
+      delivery-timeout-ms: ${PAYMENT_KAFKA_DELIVERY_TIMEOUT_MS:8000}
+
+  outbox:
+    publisher:
+      fixed-delay-ms: ${PAYMENT_OUTBOX_FIXED_DELAY_MS:5000}
+      initial-delay-ms: ${PAYMENT_OUTBOX_INITIAL_DELAY_MS:3000}
+      batch-size: ${PAYMENT_OUTBOX_BATCH_SIZE:20}
+      send-timeout-seconds: ${PAYMENT_OUTBOX_SEND_TIMEOUT_SECONDS:10}
+      retry-delay-ms: ${PAYMENT_OUTBOX_RETRY_DELAY_MS:5000}
