@@ -41,6 +41,7 @@ Thumbs.db
 
 .env
 .env.*
+!.env.example
 
 #################################################
 # Local Spring Config

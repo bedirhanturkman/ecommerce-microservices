@@ -10,6 +10,7 @@ spring:
             locator:
               enabled: true
               lower-case-service-id: true
+
           routes:
             - id: auth-service
               uri: lb://auth-service
@@ -35,3 +36,15 @@ spring:
               uri: lb://order-service
               predicates:
                 - Path=/api/v1/orders/**
+eureka:
+  instance:
+    prefer-ip-address: true
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
+
+  client:
+    enabled: true
+    register-with-eureka: true
+    fetch-registry: true
+
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
