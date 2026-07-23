@@ -4,4 +4,4 @@ server:
 spring:
   data:
     mongodb:
-      uri: mongodb://localhost:27017/product_db
+      uri: ${PRODUCT_MONGODB_URI:mongodb://localhost:27017/product_db}
