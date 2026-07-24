@@ -149,6 +149,7 @@ services:
       CONFIG_REPO_LOCATION: "file:/configrepo"
       EUREKA_DEFAULT_ZONE: "http://eureka-server:8761/eureka"
       EUREKA_INSTANCE_HOSTNAME: "config-server"
+      JWT_SECRET: "${JWT_SECRET}"
 
     volumes:
       - ./config-server/configrepo:/configrepo:ro
@@ -186,6 +187,7 @@ services:
       CONFIG_SERVER_URL: "http://config-server:8888"
       EUREKA_DEFAULT_ZONE: "http://eureka-server:8761/eureka"
       EUREKA_INSTANCE_HOSTNAME: "api-gateway"
+      JWT_SECRET: "${JWT_SECRET}"
 
     depends_on:
       eureka-server:
@@ -221,6 +223,7 @@ services:
       SPRING_CONFIG_IMPORT: "configserver:http://config-server:8888"
       CONFIG_SERVER_URL: "http://config-server:8888"
       EUREKA_DEFAULT_ZONE: "http://eureka-server:8761/eureka/"
+      JWT_SECRET: "${JWT_SECRET}"
 
       CUSTOMER_DB_URL: "jdbc:postgresql://postgres:5432/customer_db"
       CUSTOMER_DB_USERNAME: "${POSTGRES_USER:-postgres}"
@@ -262,9 +265,8 @@ services:
       SPRING_CONFIG_IMPORT: "configserver:http://config-server:8888"
       CONFIG_SERVER_URL: "http://config-server:8888"
       EUREKA_DEFAULT_ZONE: "http://eureka-server:8761/eureka/"
-
+      JWT_SECRET: "${JWT_SECRET}"
       PRODUCT_MONGODB_URI: "mongodb://mongo:27017/product_db"
-      SPRING_DATA_MONGODB_URI: "mongodb://mongo:27017/product_db"
 
     depends_on:
       mongo:
@@ -279,6 +281,46 @@ services:
         [
           "CMD-SHELL",
           "bash -c 'echo > /dev/tcp/127.0.0.1/8083'"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+
+    networks:
+      - ecommerce-network
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+
+    restart: unless-stopped
+
+    ports:
+      - "${AUTH_SERVICE_PORT:-8084}:8084"
+
+    environment:
+      SPRING_CONFIG_IMPORT: "configserver:http://config-server:8888"
+      CONFIG_SERVER_URL: "http://config-server:8888"
+      EUREKA_DEFAULT_ZONE: "http://eureka-server:8761/eureka/"
+      JWT_SECRET: "${JWT_SECRET}"
+
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+
+      config-server:
+        condition: service_healthy
+
+      customer-service:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'echo > /dev/tcp/127.0.0.1/8084'"
         ]
       interval: 10s
       timeout: 5s
