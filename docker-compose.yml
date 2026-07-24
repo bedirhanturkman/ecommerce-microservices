@@ -329,6 +329,143 @@ services:
 
     networks:
       - ecommerce-network
+
+  order-service:
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+
+    restart: unless-stopped
+
+    ports:
+      - "${ORDER_SERVICE_PORT:-8082}:8082"
+
+    environment:
+      SPRING_CONFIG_IMPORT: "configserver:http://config-server:8888"
+      CONFIG_SERVER_URL: "http://config-server:8888"
+      EUREKA_DEFAULT_ZONE: "http://eureka-server:8761/eureka/"
+      JWT_SECRET: "${JWT_SECRET}"
+
+      ORDER_DB_URL: "jdbc:postgresql://postgres:5432/order_db"
+      ORDER_DB_USERNAME: "${POSTGRES_USER:-postgres}"
+      ORDER_DB_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'echo > /dev/tcp/127.0.0.1/8082'"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 50s
+
+    networks:
+      - ecommerce-network
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: inventory-service/Dockerfile
+
+    restart: unless-stopped
+
+    ports:
+      - "${INVENTORY_SERVICE_PORT:-8085}:8085"
+
+    environment:
+      SPRING_CONFIG_IMPORT: "configserver:http://config-server:8888"
+      CONFIG_SERVER_URL: "http://config-server:8888"
+      EUREKA_DEFAULT_ZONE: "http://eureka-server:8761/eureka/"
+      JWT_SECRET: "${JWT_SECRET}"
+
+      INVENTORY_DB_URL: "jdbc:postgresql://postgres:5432/inventory_db"
+      INVENTORY_DB_USERNAME: "${POSTGRES_USER:-postgres}"
+      INVENTORY_DB_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'echo > /dev/tcp/127.0.0.1/8085'"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 50s
+
+    networks:
+      - ecommerce-network
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+
+    restart: unless-stopped
+
+    ports:
+      - "${PAYMENT_SERVICE_PORT:-8086}:8086"
+
+    environment:
+      SPRING_CONFIG_IMPORT: "configserver:http://config-server:8888"
+      CONFIG_SERVER_URL: "http://config-server:8888"
+      EUREKA_DEFAULT_ZONE: "http://eureka-server:8761/eureka/"
+
+      PAYMENT_DB_URL: "jdbc:postgresql://postgres:5432/payment_db"
+      PAYMENT_DB_USERNAME: "${POSTGRES_USER:-postgres}"
+      PAYMENT_DB_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'echo > /dev/tcp/127.0.0.1/8086'"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 50s
+
+    networks:
+      - ecommerce-network
 volumes:
   postgres_data:
     name: ecommerce-microservices_postgres_data
