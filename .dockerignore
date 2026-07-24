@@ -1,0 +1,13 @@
+**/target/
+**/.idea/
+**/*.iml
+
+.git/
+.gitignore
+
+.env
+docker-data/
+data/
+logs/
+
+README.md

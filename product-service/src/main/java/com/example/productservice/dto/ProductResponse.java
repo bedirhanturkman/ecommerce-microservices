@@ -6,7 +6,6 @@ public record ProductResponse(
         String id,
         String name,
         String description,
-        BigDecimal price,
-        Integer stock
+        BigDecimal price
 ) {
 }
