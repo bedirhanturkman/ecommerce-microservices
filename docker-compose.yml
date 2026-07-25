@@ -162,12 +162,12 @@ services:
       test:
         [
           "CMD-SHELL",
-          "bash -c 'echo > /dev/tcp/127.0.0.1/8888'"
+          "curl --fail --silent --show-error http://localhost:8888/actuator/health/readiness > /dev/null || exit 1"
         ]
       interval: 10s
       timeout: 5s
       retries: 15
-      start_period: 30s
+      start_period: 40s
 
     networks:
       - ecommerce-network
