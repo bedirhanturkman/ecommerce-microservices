@@ -9,3 +9,27 @@ eureka:
   client:
     register-with-eureka: false
     fetch-registry: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - info
+
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+  info:
+    env:
+      enabled: true
+
+info:
+  application:
+    name: ${spring.application.name}
+    description: Eureka service discovery server
+    environment: ${SPRING_PROFILES_ACTIVE:default}
