@@ -25,4 +25,14 @@ public class OrderController {
     ) {
         return orderService.createOrder(request, authorizationHeader);
     }
+
+    @GetMapping("/{id}")
+    @PreAuthorize(PermissionConstants.HAS_ROLE_USER_OR_ADMIN)
+    public OrderResponse findById(
+            @PathVariable Long id,
+            @RequestHeader("Authorization") String authorizationHeader
+    ) {
+        return orderService.findOrderById(id);
+    }
+
 }

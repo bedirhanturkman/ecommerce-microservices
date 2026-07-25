@@ -9,6 +9,7 @@ import com.example.orderservice.dto.ProductResponse;
 import com.example.orderservice.entity.Order;
 import com.example.orderservice.entity.OrderItem;
 import com.example.orderservice.entity.OrderStatus;
+import com.example.orderservice.exception.OrderNotFoundException;
 import com.example.orderservice.mapper.OrderEventMapper;
 import com.example.orderservice.mapper.OrderMapper;
 import com.example.orderservice.outbox.OrderOutboxService;
@@ -146,5 +147,10 @@ public class OrderService {
                 .unitPrice(product.price())
                 .totalPrice(totalPrice)
                 .build();
+    }
+
+    public OrderResponse findOrderById(Long id) {
+        Order order = orderRepository.findById(id).orElseThrow(() -> new OrderNotFoundException(id));
+        return orderMapper.toOrderResponse(order);
     }
 }

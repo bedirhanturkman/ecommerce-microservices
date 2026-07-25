@@ -125,12 +125,12 @@ services:
       test:
         [
           "CMD-SHELL",
-          "bash -c 'echo > /dev/tcp/127.0.0.1/8761'"
+          "curl --fail --silent --show-error http://localhost:8761/actuator/health/readiness > /dev/null || exit 1"
         ]
       interval: 10s
       timeout: 5s
       retries: 15
-      start_period: 30s
+      start_period: 40s
 
     networks:
       - ecommerce-network
@@ -162,12 +162,12 @@ services:
       test:
         [
           "CMD-SHELL",
-          "bash -c 'echo > /dev/tcp/127.0.0.1/8888'"
+          "curl --fail --silent --show-error http://localhost:8888/actuator/health/readiness > /dev/null || exit 1"
         ]
       interval: 10s
       timeout: 5s
       retries: 15
-      start_period: 30s
+      start_period: 40s
 
     networks:
       - ecommerce-network
@@ -199,7 +199,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "bash -c 'echo > /dev/tcp/127.0.0.1/8080'"
+          "curl --fail --silent --show-error http://localhost:8080/actuator/health/readiness > /dev/null || exit 1"
         ]
       interval: 10s
       timeout: 5s
@@ -241,7 +241,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "bash -c 'echo > /dev/tcp/127.0.0.1/8081'"
+          "curl --fail --silent --show-error http://localhost:8081/actuator/health/readiness > /dev/null || exit 1"
         ]
       interval: 10s
       timeout: 5s
@@ -280,7 +280,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "bash -c 'echo > /dev/tcp/127.0.0.1/8083'"
+          "curl --fail --silent --show-error http://localhost:8083/actuator/health/readiness > /dev/null || exit 1"
         ]
       interval: 10s
       timeout: 5s
@@ -320,7 +320,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "bash -c 'echo > /dev/tcp/127.0.0.1/8084'"
+          "curl --fail --silent --show-error http://localhost:8084/actuator/health/readiness > /dev/null || exit 1"
         ]
       interval: 10s
       timeout: 5s
@@ -366,7 +366,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "bash -c 'echo > /dev/tcp/127.0.0.1/8082'"
+          "curl --fail --silent --show-error http://localhost:8082/actuator/health/readiness > /dev/null || exit 1"
         ]
       interval: 10s
       timeout: 5s
@@ -412,7 +412,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "bash -c 'echo > /dev/tcp/127.0.0.1/8085'"
+          "curl --fail --silent --show-error http://localhost:8085/actuator/health/readiness > /dev/null || exit 1"
         ]
       interval: 10s
       timeout: 5s
@@ -457,7 +457,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "bash -c 'echo > /dev/tcp/127.0.0.1/8086'"
+          "curl --fail --silent --show-error http://localhost:8086/actuator/health/readiness > /dev/null || exit 1"
         ]
       interval: 10s
       timeout: 5s
