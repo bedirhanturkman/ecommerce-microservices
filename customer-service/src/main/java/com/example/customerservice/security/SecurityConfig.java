@@ -14,42 +14,79 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtGra
 import org.springframework.security.web.SecurityFilterChain;
 
 import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    @Value("${jwt.secret}") // Burada JWT imzalamada kullanılan secret key, doğrudan kod içine yazılmıyor. Artık Config Server’dan geliyor.
-    private String secretKey;  // Yani Auth Service token üretir, Customer Service bu token’ın gerçekten bizim sistemimiz tarafından üretilip üretilmediğini aynı secret ile kontrol eder.
+    /*
+     * JWT imzalamada kullanılan secret key doğrudan kod içine yazılmaz.
+     * Değer Config Server üzerinden alınır.
+     *
+     * Auth Service token üretirken bu secret'ı kullanır.
+     * Customer Service de token imzasını aynı secret ile doğrular.
+     */
+    @Value("${jwt.secret}")
+    private String secretKey;
 
+    /*
+     * Customer Service güvenlik kurallarını tanımlar.
+     *
+     * - CSRF devre dışıdır.
+     * - Session tutulmaz.
+     * - Internal endpoint'ler token olmadan erişilebilir.
+     * - Actuator health ve info endpoint'leri token olmadan erişilebilir.
+     * - Diğer bütün endpoint'ler JWT gerektirir.
+     */
     @Bean
-    public SecurityFilterChain securityFilterChain( // Bu metot Customer Service’in güvenlik kurallarını belirliyor. Yani hangi endpoint açık, hangi endpoint token ister, JWT nasıl okunur gibi kararlar burada veriliyor.
+    public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             JwtAuthenticationConverter jwtAuthenticationConverter
     ) throws Exception {
 
         return http
                 .csrf(AbstractHttpConfigurer::disable)
+
                 .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/customers/internal").permitAll()
-                        .requestMatchers("/api/v1/customers/by-email/**").permitAll()
-                        .anyRequest().authenticated()
-                )
-                .oauth2ResourceServer(oauth2 ->  //  Bu servis bir OAuth2 Resource Server olarak çalışacak.
-                        oauth2.jwt(jwt ->                                      // JWT token bekleyecek Authorization: Bearer <token> header’ını Spring Security kendisi okuyacak.
-                                jwt.jwtAuthenticationConverter(jwtAuthenticationConverter) //  Token geçerliyse Authentication nesnesi oluşturacak.
+                        session.sessionCreationPolicy(
+                                SessionCreationPolicy.STATELESS
                         )
                 )
+
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                "/actuator/health",
+                                "/actuator/health/**",
+                                "/actuator/info"
+                        ).permitAll()
+
+                        .requestMatchers(
+                                "/api/v1/customers/internal",
+                                "/api/v1/customers/by-email/**"
+                        ).permitAll()
+
+                        .anyRequest().authenticated()
+                )
+
+                .oauth2ResourceServer(oauth2 ->
+                        oauth2.jwt(jwt ->
+                                jwt.jwtAuthenticationConverter(
+                                        jwtAuthenticationConverter
+                                )
+                        )
+                )
+
                 .build();
     }
 
+    /*
+     * Gelen JWT token'ın HMAC SHA-256 imzasını doğrular.
+     */
     @Bean
     public JwtDecoder jwtDecoder() {
         SecretKeySpec secretKeySpec = new SecretKeySpec(
-                secretKey.getBytes(),
+                secretKey.getBytes(StandardCharsets.UTF_8),
                 "HmacSHA256"
         );
 
@@ -58,6 +95,13 @@ public class SecurityConfig {
                 .build();
     }
 
+    /*
+     * Token içindeki "role" claim'ini Spring Security authority yapısına çevirir.
+     *
+     * Örnek:
+     * role = USER
+     * authority = ROLE_USER
+     */
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter authoritiesConverter =
@@ -69,7 +113,10 @@ public class SecurityConfig {
         JwtAuthenticationConverter authenticationConverter =
                 new JwtAuthenticationConverter();
 
-        authenticationConverter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
+        authenticationConverter.setJwtGrantedAuthoritiesConverter(
+                authoritiesConverter
+        );
+
         authenticationConverter.setPrincipalClaimName("sub");
 
         return authenticationConverter;

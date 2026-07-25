@@ -241,7 +241,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "bash -c 'echo > /dev/tcp/127.0.0.1/8081'"
+          "curl --fail --silent --show-error http://localhost:8081/actuator/health/readiness > /dev/null || exit 1"
         ]
       interval: 10s
       timeout: 5s
