@@ -16,10 +16,19 @@ public class SecurityConfig {
 
         return http
                 .csrf(AbstractHttpConfigurer::disable)
+
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                "/actuator/health",
+                                "/actuator/health/**",
+                                "/actuator/info"
+                        ).permitAll()
+
                         .requestMatchers("/api/v1/auth/**").permitAll()
+
                         .anyRequest().permitAll()
                 )
+
                 .build();
     }
 
