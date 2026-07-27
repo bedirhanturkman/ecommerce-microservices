@@ -496,6 +496,41 @@ services:
     networks:
       - ecommerce-network
 
+  grafana:
+    image: grafana/grafana:13.1.1
+    restart: unless-stopped
+
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --quiet --tries=1 --spider http://localhost:3000/api/health || exit 1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+    networks:
+      - ecommerce-network
+
 volumes:
   postgres_data:
     name: ecommerce-microservices_postgres_data
@@ -505,6 +540,9 @@ volumes:
 
   prometheus_data:
     name: ecommerce-microservices_prometheus_data
+
+  grafana_data:
+    name: ecommerce-microservices_grafana_data
 
 networks:
   ecommerce-network:
