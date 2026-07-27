@@ -1,6 +1,7 @@
 package com.example.orderservice.consumer;
 
 import com.example.commonevents.payment.PaymentSucceededEvent;
+import com.example.orderservice.metrics.OrderMetrics;
 import com.example.orderservice.service.OrderResultEventValidator;
 import com.example.orderservice.service.OrderResultProcessingService;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,7 @@ public class PaymentSucceededConsumer {
     private final OrderResultEventValidator validator;
     private final OrderResultProcessingService
             processingService;
+    private final OrderMetrics orderMetrics;
 
     @KafkaListener(
             topics =
@@ -47,6 +49,12 @@ public class PaymentSucceededConsumer {
 
             return;
         }
+
+        /*
+         * Counter yalnızca sipariş durumu gerçekten
+         * PAID olarak değiştirildiyse artırılır.
+         */
+        orderMetrics.incrementPaidOrders();
 
         log.info(
                 "Order marked as PAID. orderId={}",

@@ -12,6 +12,7 @@ import com.example.orderservice.entity.OrderStatus;
 import com.example.orderservice.exception.OrderNotFoundException;
 import com.example.orderservice.mapper.OrderEventMapper;
 import com.example.orderservice.mapper.OrderMapper;
+import com.example.orderservice.metrics.OrderMetrics;
 import com.example.orderservice.outbox.OrderOutboxService;
 import com.example.orderservice.repository.OrderRepository;
 import org.springframework.stereotype.Service;
@@ -29,13 +30,15 @@ public class OrderService {
     private final ProductClient productClient;
     private final OrderEventMapper orderEventMapper;
     private final OrderOutboxService orderOutboxService;
+    private final OrderMetrics orderMetrics;
 
     public OrderService(
             OrderRepository orderRepository,
             OrderMapper orderMapper,
             ProductClient productClient,
             OrderEventMapper orderEventMapper,
-            OrderOutboxService orderOutboxService
+            OrderOutboxService orderOutboxService,
+            OrderMetrics orderMetrics
     ) {
         this.orderRepository = orderRepository;
         this.orderMapper = orderMapper;
@@ -43,10 +46,23 @@ public class OrderService {
         this.orderEventMapper = orderEventMapper;
         this.orderOutboxService =
                 orderOutboxService;
+        this.orderMetrics = orderMetrics;
     }
 
     @Transactional
     public OrderResponse createOrder(
+            CreateOrderRequest request,
+            String authorizationHeader
+    ) {
+        return orderMetrics.recordOrderCreation(
+                () -> createOrderAndOutboxEvent(
+                        request,
+                        authorizationHeader
+                )
+        );
+    }
+
+    private OrderResponse createOrderAndOutboxEvent(
             CreateOrderRequest request,
             String authorizationHeader
     ) {
@@ -114,6 +130,13 @@ public class OrderService {
                         orderCreatedEvent
                 );
 
+        /*
+         * Sayaç ancak mevcut transaction başarıyla
+         * commit edilirse artırılır.
+         */
+        orderMetrics
+                .incrementCreatedOrdersAfterCommit();
+
         return orderMapper.toOrderResponse(
                 savedOrder
         );
@@ -149,8 +172,15 @@ public class OrderService {
                 .build();
     }
 
-    public OrderResponse findOrderById(Long id) {
-        Order order = orderRepository.findById(id).orElseThrow(() -> new OrderNotFoundException(id));
+    public OrderResponse findOrderById(
+            Long id
+    ) {
+        Order order = orderRepository
+                .findById(id)
+                .orElseThrow(
+                        () -> new OrderNotFoundException(id)
+                );
+
         return orderMapper.toOrderResponse(order);
     }
 }
