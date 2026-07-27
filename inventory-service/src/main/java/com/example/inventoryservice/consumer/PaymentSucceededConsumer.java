@@ -1,6 +1,7 @@
 package com.example.inventoryservice.consumer;
 
 import com.example.commonevents.payment.PaymentSucceededEvent;
+import com.example.inventoryservice.metrics.InventoryMetrics;
 import com.example.inventoryservice.service.PaymentResultEventValidator;
 import com.example.inventoryservice.service.PaymentResultProcessingService;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,8 @@ public class PaymentSucceededConsumer {
     private final PaymentResultProcessingService
             processingService;
 
+    private final InventoryMetrics inventoryMetrics;
+
     @KafkaListener(
             topics =
                     "${inventory.kafka.topics.payment-succeeded}",
@@ -28,8 +31,8 @@ public class PaymentSucceededConsumer {
             PaymentSucceededEvent event
     ) {
         log.info(
-                "PaymentSucceededEvent received. " +
-                        "paymentId={}, orderId={}, amount={}",
+                "PaymentSucceededEvent received. "
+                        + "paymentId={}, orderId={}, amount={}",
                 event.paymentId(),
                 event.orderId(),
                 event.amount()
@@ -43,13 +46,21 @@ public class PaymentSucceededConsumer {
 
         if (!confirmed) {
             log.info(
-                    "Inventory reservation already confirmed. " +
-                            "orderId={}",
+                    "Inventory reservation already confirmed. "
+                            + "orderId={}",
                     event.orderId()
             );
 
             return;
         }
+
+        /*
+         * processSucceededPayment, ReservationService üzerindeki
+         * transactional metot tamamlandıktan sonra döner.
+         * Bu nedenle confirmed=true olduğunda değişiklik commit
+         * edilmiş ve sayaç güvenli şekilde artırılabilir.
+         */
+        inventoryMetrics.incrementReservationsConfirmed();
 
         log.info(
                 "Inventory reservation confirmed. orderId={}",

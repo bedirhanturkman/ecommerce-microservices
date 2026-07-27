@@ -1,6 +1,7 @@
 package com.example.inventoryservice.consumer;
 
 import com.example.commonevents.payment.PaymentFailedEvent;
+import com.example.inventoryservice.metrics.InventoryMetrics;
 import com.example.inventoryservice.service.PaymentResultEventValidator;
 import com.example.inventoryservice.service.PaymentResultProcessingService;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,8 @@ public class PaymentFailedConsumer {
     private final PaymentResultProcessingService
             processingService;
 
+    private final InventoryMetrics inventoryMetrics;
+
     @KafkaListener(
             topics =
                     "${inventory.kafka.topics.payment-failed}",
@@ -28,8 +31,8 @@ public class PaymentFailedConsumer {
             PaymentFailedEvent event
     ) {
         log.info(
-                "PaymentFailedEvent received. " +
-                        "paymentId={}, orderId={}, failureCode={}",
+                "PaymentFailedEvent received. "
+                        + "paymentId={}, orderId={}, failureCode={}",
                 event.paymentId(),
                 event.orderId(),
                 event.failureCode()
@@ -43,13 +46,15 @@ public class PaymentFailedConsumer {
 
         if (!released) {
             log.info(
-                    "Inventory reservation already released. " +
-                            "orderId={}",
+                    "Inventory reservation already released. "
+                            + "orderId={}",
                     event.orderId()
             );
 
             return;
         }
+
+        inventoryMetrics.incrementReservationsReleased();
 
         log.info(
                 "Inventory reservation released. orderId={}",

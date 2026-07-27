@@ -18,7 +18,7 @@ public class InventoryFailureOutboxService {
     @Transactional(
             propagation = Propagation.REQUIRES_NEW
     )
-    public void saveFailureEvent(
+    public boolean saveFailureEvent(
             InventoryReservationFailedEvent event
     ) {
         boolean created =
@@ -34,7 +34,7 @@ public class InventoryFailureOutboxService {
                     event.orderId()
             );
 
-            return;
+            return false;
         }
 
         log.info(
@@ -43,5 +43,7 @@ public class InventoryFailureOutboxService {
                 event.orderId(),
                 event.errorCode()
         );
+
+        return true;
     }
 }
