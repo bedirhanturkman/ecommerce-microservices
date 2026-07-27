@@ -68,7 +68,6 @@ services:
 
     environment:
       KAFKA_NODE_ID: 1
-
       KAFKA_PROCESS_ROLES: broker,controller
 
       KAFKA_LISTENERS: >-
@@ -309,10 +308,8 @@ services:
     depends_on:
       eureka-server:
         condition: service_healthy
-
       config-server:
         condition: service_healthy
-
       customer-service:
         condition: service_healthy
 
@@ -466,12 +463,48 @@ services:
 
     networks:
       - ecommerce-network
+
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    restart: unless-stopped
+
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/prometheus-local.yml:/etc/prometheus/prometheus-local.yml:ro
+      - prometheus_data:/prometheus
+
+    command:
+      - "--config.file=/etc/prometheus/${PROMETHEUS_CONFIG_FILE:-prometheus.yml}"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --quiet --tries=1 --spider http://localhost:9090/-/ready || exit 1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+    networks:
+      - ecommerce-network
+
 volumes:
   postgres_data:
     name: ecommerce-microservices_postgres_data
 
   mongo_data:
     name: ecommerce-microservices_mongo_data
+
+  prometheus_data:
+    name: ecommerce-microservices_prometheus_data
 
 networks:
   ecommerce-network:
