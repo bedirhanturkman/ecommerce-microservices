@@ -1,6 +1,7 @@
 package com.example.orderservice.consumer;
 
 import com.example.commonevents.payment.PaymentFailedEvent;
+import com.example.orderservice.metrics.OrderMetrics;
 import com.example.orderservice.service.OrderResultEventValidator;
 import com.example.orderservice.service.OrderResultProcessingService;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,7 @@ public class PaymentFailedConsumer {
     private final OrderResultEventValidator validator;
     private final OrderResultProcessingService
             processingService;
+    private final OrderMetrics orderMetrics;
 
     @KafkaListener(
             topics =
@@ -49,6 +51,12 @@ public class PaymentFailedConsumer {
 
             return;
         }
+
+        /*
+         * Sayaç yalnızca sipariş durumu gerçekten
+         * PAYMENT_FAILED olarak değiştirildiyse artırılır.
+         */
+        orderMetrics.incrementPaymentFailedOrders();
 
         log.info(
                 "Order marked as PAYMENT_FAILED. orderId={}",

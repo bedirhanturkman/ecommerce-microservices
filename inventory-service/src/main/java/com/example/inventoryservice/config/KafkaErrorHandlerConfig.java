@@ -9,6 +9,7 @@ import com.example.inventoryservice.exception.InvalidStockQuantityException;
 import com.example.inventoryservice.exception.InventoryNotFoundException;
 import com.example.inventoryservice.exception.ReservationAlreadyExistsException;
 import com.example.inventoryservice.mapper.InventoryReservationFailureEventFactory;
+import com.example.inventoryservice.metrics.InventoryMetrics;
 import com.example.inventoryservice.outbox.InventoryFailureOutboxService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.TopicPartition;
@@ -38,6 +39,8 @@ public class KafkaErrorHandlerConfig {
     private final InventoryReservationFailureEventFactory
             failureEventFactory;
 
+    private final InventoryMetrics inventoryMetrics;
+
     private final long retryIntervalMs;
     private final long maxRetries;
 
@@ -51,6 +54,8 @@ public class KafkaErrorHandlerConfig {
 
             InventoryReservationFailureEventFactory
                     failureEventFactory,
+
+            InventoryMetrics inventoryMetrics,
 
             @Value("${inventory.kafka.retry.interval-ms}")
             long retryIntervalMs,
@@ -66,6 +71,9 @@ public class KafkaErrorHandlerConfig {
 
         this.failureEventFactory =
                 failureEventFactory;
+
+        this.inventoryMetrics =
+                inventoryMetrics;
 
         this.retryIntervalMs =
                 retryIntervalMs;
@@ -102,9 +110,11 @@ public class KafkaErrorHandlerConfig {
                      * Mesaj OrderCreatedEvent olarak deserialize
                      * edilebildiyse orderId bilgisine ulaşabiliriz.
                      *
-                     * Reservation işlemi başarısız olduğu için asıl
-                     * transaction rollback olmuştur. Failure Outbox
-                     * kaydı REQUIRES_NEW transaction ile oluşturulur.
+                     * Reservation işlemi başarısız olduğu için
+                     * asıl transaction rollback olmuştur.
+                     *
+                     * Failure Outbox kaydı REQUIRES_NEW transaction
+                     * içerisinde oluşturulur.
                      */
                     if (record.value()
                             instanceof OrderCreatedEvent
@@ -139,9 +149,9 @@ public class KafkaErrorHandlerConfig {
                     }
 
                     /*
-                     * Failure Outbox kaydı güvenli şekilde
-                     * oluşturulduktan sonra orijinal order-created
-                     * mesajını DLT'ye göndeririz.
+                     * Failure Outbox işlemi tamamlandıktan sonra
+                     * orijinal order-created mesajı DLT'ye
+                     * gönderilir.
                      */
                     dltRecoverer.accept(
                             record,
@@ -163,8 +173,8 @@ public class KafkaErrorHandlerConfig {
 
         /*
          * Kalıcı business veya validation hatalarıdır.
-         * Tekrar deneme sonucu değiştirmeyeceği için doğrudan
-         * recoverer çalışır.
+         * Tekrar deneme sonucu değiştirmeyeceği için
+         * doğrudan recoverer çalışır.
          */
         errorHandler.addNotRetryableExceptions(
                 InvalidOrderCreatedEventException.class,
@@ -178,7 +188,8 @@ public class KafkaErrorHandlerConfig {
 
         /*
          * Optimistic locking ve geçici altyapı hataları bu
-         * listeye eklenmediği için retry edilebilir durumda kalır.
+         * listeye eklenmediği için retry edilebilir durumda
+         * kalır.
          */
         errorHandler.setRetryListeners(
                 (record, exception, deliveryAttempt) -> {
@@ -220,8 +231,8 @@ public class KafkaErrorHandlerConfig {
                 );
 
         /*
-         * DLT publish başarısız olursa mesajın başarılı şekilde
-         * recover edilmiş kabul edilmesini engeller.
+         * DLT publish başarısız olursa mesajın başarılı
+         * şekilde recover edilmiş kabul edilmesini engeller.
          */
         recoverer.setFailIfSendResultIsError(
                 true
@@ -240,14 +251,39 @@ public class KafkaErrorHandlerConfig {
                         exception
                 );
 
-        inventoryFailureOutboxService
-                .saveFailureEvent(
-                        failureEvent
-                );
+        boolean created =
+                inventoryFailureOutboxService
+                        .saveFailureEvent(
+                                failureEvent
+                        );
+
+        /*
+         * Sayaç yalnızca gerçekten yeni bir failure
+         * outbox kaydı oluşturulduğunda artırılır.
+         *
+         * Recoverer tekrar çalışır ve aynı kayıt zaten
+         * mevcutsa created=false olur; metric ikinci
+         * kez artırılmaz.
+         */
+        if (!created) {
+            log.info(
+                    "Inventory reservation failure metric "
+                            + "was not incremented because "
+                            + "the outbox event already exists. "
+                            + "orderId={}",
+                    failureEvent.orderId()
+            );
+
+            return;
+        }
+
+        inventoryMetrics
+                .incrementReservationsFailed();
 
         log.info(
                 "InventoryReservationFailedEvent saved "
-                        + "to Outbox. orderId={}, errorCode={}",
+                        + "to Outbox and failure metric incremented. "
+                        + "orderId={}, errorCode={}",
                 failureEvent.orderId(),
                 failureEvent.errorCode()
         );

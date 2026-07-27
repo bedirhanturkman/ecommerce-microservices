@@ -1,6 +1,7 @@
 package com.example.inventoryservice.consumer;
 
 import com.example.commonevents.order.OrderCreatedEvent;
+import com.example.inventoryservice.metrics.InventoryMetrics;
 import com.example.inventoryservice.service.OrderCreatedEventProcessingService;
 import com.example.inventoryservice.validation.OrderCreatedEventValidator;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,8 @@ public class InventoryConsumer {
 
     private final OrderCreatedEventValidator
             eventValidator;
+
+    private final InventoryMetrics inventoryMetrics;
 
     @KafkaListener(
             topics =
@@ -38,7 +41,9 @@ public class InventoryConsumer {
         );
 
         boolean processed =
-                processingService.process(event);
+                inventoryMetrics.recordReservationProcessing(
+                        () -> processingService.process(event)
+                );
 
         if (!processed) {
             log.info(
@@ -49,6 +54,20 @@ public class InventoryConsumer {
 
             return;
         }
+
+        /*
+         * process metodu yalnızca:
+         *
+         * - stok rezervasyonu,
+         * - InventoryReserved outbox kaydı,
+         * - processed-event kaydı
+         *
+         * başarıyla tamamlandığında true döner.
+         *
+         * Transaction da metoda dönüşten önce commit edildiği
+         * için sayaç burada güvenli şekilde artırılabilir.
+         */
+        inventoryMetrics.incrementReservationsCreated();
 
         log.info(
                 "Inventory reservation transaction completed. "
