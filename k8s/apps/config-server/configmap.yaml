@@ -1,0 +1,394 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-server-repository
+  namespace: ecommerce
+  labels:
+    app.kubernetes.io/name: config-server
+    app.kubernetes.io/component: configuration
+    app.kubernetes.io/part-of: ecommerce-microservices
+data:
+  api-gateway.yml: |
+    server:
+      port: 8080
+
+    spring:
+      cloud:
+        gateway:
+          server:
+            webflux:
+              discovery:
+                locator:
+                  enabled: false
+                  lower-case-service-id: true
+
+              routes:
+                - id: auth-service
+                  uri: lb://auth-service
+                  predicates:
+                    - Path=/api/v1/auth/**
+
+                - id: customer-service
+                  uri: lb://customer-service
+                  predicates:
+                    - Path=/api/v1/customers/**
+
+                - id: product-service
+                  uri: lb://product-service
+                  predicates:
+                    - Path=/api/v1/products/**
+
+                - id: inventory-service
+                  uri: lb://inventory-service
+                  predicates:
+                    - Path=/api/v1/inventory/**
+
+                - id: order-service
+                  uri: lb://order-service
+                  predicates:
+                    - Path=/api/v1/orders/**
+  application.yml: |
+    jwt:
+      secret: ${JWT_SECRET:change-me-local-dev-secret-32chars}
+
+    eureka:
+      instance:
+        prefer-ip-address: true
+
+      client:
+        enabled: true
+        register-with-eureka: true
+        fetch-registry: true
+
+        service-url:
+          defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
+
+    management:
+      endpoints:
+        web:
+          exposure:
+            include:
+              - health
+              - info
+              - metrics
+              - prometheus
+
+      endpoint:
+        health:
+          show-details: always
+          probes:
+            enabled: true
+
+      info:
+        env:
+          enabled: true
+
+      metrics:
+        tags:
+          application: ${spring.application.name}
+
+    info:
+      application:
+        name: ${spring.application.name}
+        description: E-commerce microservice
+        environment: ${SPRING_PROFILES_ACTIVE:default}
+  auth-service.yml: |
+    server:
+      port: 8084
+
+    internal:
+      api-key: ${INTERNAL_API_KEY}
+  customer-service.yml: |
+    server:
+      port: 8081
+
+    internal:
+      api-key: ${INTERNAL_API_KEY}
+
+    spring:
+      datasource:
+        url: ${CUSTOMER_DB_URL:jdbc:postgresql://localhost:5432/customer_db}
+        username: ${CUSTOMER_DB_USERNAME:postgres}
+        password: ${CUSTOMER_DB_PASSWORD:postgres}
+        driver-class-name: org.postgresql.Driver
+
+      jpa:
+        hibernate:
+          ddl-auto: validate
+        show-sql: true
+        properties:
+          hibernate:
+            format_sql: true
+  inventory-service.yml: |2
+    server:
+      port: 8085
+
+    spring:
+      datasource:
+        url: ${INVENTORY_DB_URL:jdbc:postgresql://localhost:5432/inventory_db}
+        username: ${INVENTORY_DB_USERNAME:postgres}
+        password: ${INVENTORY_DB_PASSWORD:postgres}
+        driver-class-name: org.postgresql.Driver
+
+      jpa:
+        hibernate:
+          ddl-auto: validate
+        open-in-view: false
+
+        # Publisher, maintenance ve monitoring scheduler'ları
+        # düzenli sorgu çalıştırdığı için SQL loglarını kapatıyoruz.
+        show-sql: false
+
+        properties:
+          hibernate:
+            format_sql: true
+            jdbc:
+              time_zone: UTC
+
+      kafka:
+        bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+        consumer:
+          group-id: ${INVENTORY_KAFKA_CONSUMER_GROUP:inventory-service}
+          auto-offset-reset: latest
+
+    inventory:
+      kafka:
+        topics:
+          order-created: ${ORDER_CREATED_TOPIC:order-created}
+          reserved: ${INVENTORY_RESERVED_TOPIC:inventory-reserved}
+          reservation-failed: ${INVENTORY_RESERVATION_FAILED_TOPIC:inventory-reservation-failed}
+          payment-succeeded: ${PAYMENT_SUCCEEDED_TOPIC:payment-succeeded}
+          payment-failed: ${PAYMENT_FAILED_TOPIC:payment-failed}
+
+        retry:
+          interval-ms: ${INVENTORY_KAFKA_RETRY_INTERVAL_MS:2000}
+          max-retries: ${INVENTORY_KAFKA_MAX_RETRIES:2}
+
+        producer:
+          max-block-ms: ${INVENTORY_KAFKA_MAX_BLOCK_MS:3000}
+          request-timeout-ms: ${INVENTORY_KAFKA_REQUEST_TIMEOUT_MS:3000}
+          delivery-timeout-ms: ${INVENTORY_KAFKA_DELIVERY_TIMEOUT_MS:8000}
+
+      outbox:
+        publisher:
+          fixed-delay-ms: ${INVENTORY_OUTBOX_FIXED_DELAY_MS:5000}
+          initial-delay-ms: ${INVENTORY_OUTBOX_INITIAL_DELAY_MS:3000}
+          batch-size: ${INVENTORY_OUTBOX_BATCH_SIZE:20}
+          send-timeout-seconds: ${INVENTORY_OUTBOX_SEND_TIMEOUT_SECONDS:10}
+          retry-delay-ms: ${INVENTORY_OUTBOX_RETRY_DELAY_MS:5000}
+
+        maintenance:
+          enabled: ${INVENTORY_OUTBOX_MAINTENANCE_ENABLED:true}
+
+          # Normal kullanımda saatte bir bakım yapılır.
+          fixed-delay-ms: ${INVENTORY_OUTBOX_MAINTENANCE_FIXED_DELAY_MS:3600000}
+
+          # Servis başladıktan bir dakika sonra ilk bakım yapılır.
+          initial-delay-ms: ${INVENTORY_OUTBOX_MAINTENANCE_INITIAL_DELAY_MS:60000}
+
+          # Yedi günden eski PUBLISHED kayıtlar temizlenir.
+          retention-days: ${INVENTORY_OUTBOX_RETENTION_DAYS:7}
+
+          # Her bakım döngüsünde en fazla 500 kayıt silinir.
+          cleanup-batch-size: ${INVENTORY_OUTBOX_CLEANUP_BATCH_SIZE:500}
+
+        monitoring:
+          enabled: ${INVENTORY_OUTBOX_MONITORING_ENABLED:true}
+
+          # Outbox durumu dakikada bir kontrol edilir.
+          fixed-delay-ms: ${INVENTORY_OUTBOX_MONITORING_FIXED_DELAY_MS:60000}
+
+          # Servis başladıktan 15 saniye sonra ilk kontrol yapılır.
+          initial-delay-ms: ${INVENTORY_OUTBOX_MONITORING_INITIAL_DELAY_MS:15000}
+
+          # Üç veya daha fazla retry alan PENDING kayıtlar
+          # uyarı üretir.
+          high-retry-threshold: ${INVENTORY_OUTBOX_HIGH_RETRY_THRESHOLD:3}
+
+          # Altmış saniyeden uzun süre bekleyen PENDING
+          # event uyarı üretir.
+          oldest-pending-warning-seconds: ${INVENTORY_OUTBOX_OLDEST_PENDING_WARNING_SECONDS:60}
+  order-service.yml: |2
+    server:
+      port: 8082
+
+    spring:
+      datasource:
+        url: ${ORDER_DB_URL:jdbc:postgresql://localhost:5432/order_db}
+        username: ${ORDER_DB_USERNAME:postgres}
+        password: ${ORDER_DB_PASSWORD:postgres}
+        driver-class-name: org.postgresql.Driver
+
+      jpa:
+        hibernate:
+          ddl-auto: validate
+        open-in-view: false
+        show-sql: false
+
+        properties:
+          hibernate:
+            format_sql: true
+            jdbc:
+              time_zone: UTC
+
+      kafka:
+        bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+        consumer:
+          group-id: ${ORDER_KAFKA_CONSUMER_GROUP:order-service}
+          auto-offset-reset: latest
+
+    order:
+      kafka:
+        topics:
+          order-created: ${ORDER_CREATED_TOPIC:order-created}
+          payment-succeeded: ${PAYMENT_SUCCEEDED_TOPIC:payment-succeeded}
+          payment-failed: ${PAYMENT_FAILED_TOPIC:payment-failed}
+          inventory-reservation-failed: ${INVENTORY_RESERVATION_FAILED_TOPIC:inventory-reservation-failed}
+
+        retry:
+          interval-ms: ${ORDER_KAFKA_RETRY_INTERVAL_MS:2000}
+          max-retries: ${ORDER_KAFKA_MAX_RETRIES:2}
+
+        producer:
+          max-block-ms: ${ORDER_KAFKA_MAX_BLOCK_MS:3000}
+          request-timeout-ms: ${ORDER_KAFKA_REQUEST_TIMEOUT_MS:3000}
+          delivery-timeout-ms: ${ORDER_KAFKA_DELIVERY_TIMEOUT_MS:8000}
+
+      outbox:
+        publisher:
+          fixed-delay-ms: ${ORDER_OUTBOX_FIXED_DELAY_MS:5000}
+          initial-delay-ms: ${ORDER_OUTBOX_INITIAL_DELAY_MS:3000}
+          batch-size: ${ORDER_OUTBOX_BATCH_SIZE:20}
+          send-timeout-seconds: ${ORDER_OUTBOX_SEND_TIMEOUT_SECONDS:10}
+          retry-delay-ms: ${ORDER_OUTBOX_RETRY_DELAY_MS:5000}
+
+        maintenance:
+          enabled: ${ORDER_OUTBOX_MAINTENANCE_ENABLED:true}
+
+          # Normal kullanımda saatte bir bakım yapılır.
+          fixed-delay-ms: ${ORDER_OUTBOX_MAINTENANCE_FIXED_DELAY_MS:3600000}
+
+          # Servis başladıktan bir dakika sonra ilk bakım yapılır.
+          initial-delay-ms: ${ORDER_OUTBOX_MAINTENANCE_INITIAL_DELAY_MS:60000}
+
+          # Yedi günden eski PUBLISHED kayıtlar temizlenir.
+          retention-days: ${ORDER_OUTBOX_RETENTION_DAYS:7}
+
+          # Her bakım döngüsünde en fazla 500 kayıt silinir.
+          cleanup-batch-size: ${ORDER_OUTBOX_CLEANUP_BATCH_SIZE:500}
+
+        monitoring:
+          enabled: ${ORDER_OUTBOX_MONITORING_ENABLED:true}
+
+          # Outbox durumu dakikada bir kontrol edilir.
+          fixed-delay-ms: ${ORDER_OUTBOX_MONITORING_FIXED_DELAY_MS:60000}
+
+          # Servis başladıktan 15 saniye sonra ilk kontrol yapılır.
+          initial-delay-ms: ${ORDER_OUTBOX_MONITORING_INITIAL_DELAY_MS:15000}
+
+          # Üç veya daha fazla retry alan PENDING kayıtlar uyarı üretir.
+          high-retry-threshold: ${ORDER_OUTBOX_HIGH_RETRY_THRESHOLD:3}
+
+          # Altmış saniyeden uzun süre bekleyen PENDING event uyarı üretir.
+          oldest-pending-warning-seconds: ${ORDER_OUTBOX_OLDEST_PENDING_WARNING_SECONDS:60}
+  payment-service.yml: |2
+    server:
+      port: 8086
+
+    spring:
+      datasource:
+        url: ${PAYMENT_DB_URL:jdbc:postgresql://localhost:5432/payment_db}
+        username: ${PAYMENT_DB_USERNAME:postgres}
+        password: ${PAYMENT_DB_PASSWORD:postgres}
+        driver-class-name: org.postgresql.Driver
+
+      jpa:
+        hibernate:
+          ddl-auto: validate
+        open-in-view: false
+
+        # Publisher, maintenance ve monitoring scheduler'ları
+        # düzenli sorgu çalıştırdığı için SQL loglarını kapatıyoruz.
+        show-sql: false
+
+        properties:
+          hibernate:
+            format_sql: true
+            jdbc:
+              time_zone: UTC
+
+      kafka:
+        bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+        consumer:
+          group-id: ${PAYMENT_KAFKA_CONSUMER_GROUP:payment-service}
+          auto-offset-reset: latest
+
+    payment:
+      processing:
+        simulation:
+          failure-threshold: ${PAYMENT_FAILURE_THRESHOLD:100000}
+
+      kafka:
+        topics:
+          inventory-reserved: ${INVENTORY_RESERVED_TOPIC:inventory-reserved}
+          succeeded: ${PAYMENT_SUCCEEDED_TOPIC:payment-succeeded}
+          failed: ${PAYMENT_FAILED_TOPIC:payment-failed}
+
+        retry:
+          interval-ms: ${PAYMENT_KAFKA_RETRY_INTERVAL_MS:2000}
+          max-retries: ${PAYMENT_KAFKA_MAX_RETRIES:2}
+
+        producer:
+          max-block-ms: ${PAYMENT_KAFKA_MAX_BLOCK_MS:3000}
+          request-timeout-ms: ${PAYMENT_KAFKA_REQUEST_TIMEOUT_MS:3000}
+          delivery-timeout-ms: ${PAYMENT_KAFKA_DELIVERY_TIMEOUT_MS:8000}
+
+      outbox:
+        publisher:
+          fixed-delay-ms: ${PAYMENT_OUTBOX_FIXED_DELAY_MS:5000}
+          initial-delay-ms: ${PAYMENT_OUTBOX_INITIAL_DELAY_MS:3000}
+          batch-size: ${PAYMENT_OUTBOX_BATCH_SIZE:20}
+          send-timeout-seconds: ${PAYMENT_OUTBOX_SEND_TIMEOUT_SECONDS:10}
+          retry-delay-ms: ${PAYMENT_OUTBOX_RETRY_DELAY_MS:5000}
+
+        maintenance:
+          enabled: ${PAYMENT_OUTBOX_MAINTENANCE_ENABLED:true}
+
+          # Normal kullanımda saatte bir bakım yapılır.
+          fixed-delay-ms: ${PAYMENT_OUTBOX_MAINTENANCE_FIXED_DELAY_MS:3600000}
+
+          # Servis başladıktan bir dakika sonra ilk bakım yapılır.
+          initial-delay-ms: ${PAYMENT_OUTBOX_MAINTENANCE_INITIAL_DELAY_MS:60000}
+
+          # Yedi günden eski PUBLISHED kayıtlar temizlenir.
+          retention-days: ${PAYMENT_OUTBOX_RETENTION_DAYS:7}
+
+          # Her bakım çalışmasında en fazla 500 kayıt silinir.
+          cleanup-batch-size: ${PAYMENT_OUTBOX_CLEANUP_BATCH_SIZE:500}
+
+        monitoring:
+          enabled: ${PAYMENT_OUTBOX_MONITORING_ENABLED:true}
+
+          # Outbox durumu dakikada bir kontrol edilir.
+          fixed-delay-ms: ${PAYMENT_OUTBOX_MONITORING_FIXED_DELAY_MS:60000}
+
+          # Servis başladıktan 15 saniye sonra ilk kontrol yapılır.
+          initial-delay-ms: ${PAYMENT_OUTBOX_MONITORING_INITIAL_DELAY_MS:15000}
+
+          # Üç veya daha fazla retry alan PENDING kayıtlar
+          # uyarı üretir.
+          high-retry-threshold: ${PAYMENT_OUTBOX_HIGH_RETRY_THRESHOLD:3}
+
+          # Altmış saniyeden uzun süre bekleyen PENDING
+          # event uyarı üretir.
+          oldest-pending-warning-seconds: ${PAYMENT_OUTBOX_OLDEST_PENDING_WARNING_SECONDS:60}
+  product-service.yml: |
+    server:
+      port: 8083
+
+    spring:
+      mongodb:
+        uri: ${PRODUCT_MONGODB_URI:mongodb://localhost:27017/product_db}

@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-server
+  namespace: ecommerce
+  labels:
+    app.kubernetes.io/name: config-server
+    app.kubernetes.io/component: configuration
+    app.kubernetes.io/part-of: ecommerce-microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: config-server
+      app.kubernetes.io/component: configuration
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: config-server
+        app.kubernetes.io/component: configuration
+        app.kubernetes.io/part-of: ecommerce-microservices
+    spec:
+      containers:
+        - name: config-server
+          image: ecommerce/config-server:k8s-3da1dd6
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CONFIG_REPO_LOCATION
+              value: file:/configrepo
+            - name: EUREKA_DEFAULT_ZONE
+              value: http://eureka-server:8761/eureka/
+            - name: EUREKA_INSTANCE_HOSTNAME
+              value: config-server
+          ports:
+            - name: http
+              containerPort: 8888
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: config-repository
+              mountPath: /configrepo
+              readOnly: true
+      volumes:
+        - name: config-repository
+          configMap:
+            name: config-server-repository
