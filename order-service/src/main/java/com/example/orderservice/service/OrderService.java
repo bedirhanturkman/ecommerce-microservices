@@ -16,6 +16,8 @@ import com.example.orderservice.metrics.OrderMetrics;
 import com.example.orderservice.outbox.OrderOutboxService;
 import com.example.orderservice.repository.OrderRepository;
 import com.example.orderservice.security.OrderAccessContext;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -188,6 +190,16 @@ public class OrderService {
                 );
 
         return orderMapper.toOrderResponse(order);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<OrderResponse> findCurrentCustomerOrders(
+            Long customerId,
+            Pageable pageable
+    ) {
+        return orderRepository
+                .findByCustomerId(customerId, pageable)
+                .map(orderMapper::toOrderResponse);
     }
 
     private Optional<Order> findAccessibleOrder(
