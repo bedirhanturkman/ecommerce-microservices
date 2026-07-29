@@ -21,4 +21,9 @@ public interface OrderRepository
     Optional<Order> findByIdForUpdate(
             @Param("orderId") Long orderId
     );
+
+    Optional<Order> findByIdAndCustomerId(
+            Long id,
+            Long customerId
+    );
 }

@@ -20,11 +20,16 @@ public class JwtService {
         return Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateToken(String email, String role) {
+    public String generateToken(
+            String email,
+            Long customerId,
+            String role
+    ) {
         long now = System.currentTimeMillis();
 
         return Jwts.builder()
                 .subject(email)
+                .claim("customerId", customerId)
                 .claim("role", role)
                 .issuedAt(new Date(now))
                 .expiration(new Date(now + 1000 * 60 * 60))

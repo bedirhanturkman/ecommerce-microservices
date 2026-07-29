@@ -15,12 +15,14 @@ import com.example.orderservice.mapper.OrderMapper;
 import com.example.orderservice.metrics.OrderMetrics;
 import com.example.orderservice.outbox.OrderOutboxService;
 import com.example.orderservice.repository.OrderRepository;
+import com.example.orderservice.security.OrderAccessContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class OrderService {
@@ -52,23 +54,26 @@ public class OrderService {
     @Transactional
     public OrderResponse createOrder(
             CreateOrderRequest request,
-            String authorizationHeader
+            String authorizationHeader,
+            OrderAccessContext accessContext
     ) {
         return orderMetrics.recordOrderCreation(
                 () -> createOrderAndOutboxEvent(
                         request,
-                        authorizationHeader
+                        authorizationHeader,
+                        accessContext.customerId()
                 )
         );
     }
 
     private OrderResponse createOrderAndOutboxEvent(
             CreateOrderRequest request,
-            String authorizationHeader
+            String authorizationHeader,
+            Long customerId
     ) {
         Order order = Order.builder()
                 .customerId(
-                        request.customerId()
+                        customerId
                 )
                 .status(
                         OrderStatus.CREATED
@@ -172,15 +177,30 @@ public class OrderService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public OrderResponse findOrderById(
-            Long id
+            Long id,
+            OrderAccessContext accessContext
     ) {
-        Order order = orderRepository
-                .findById(id)
+        Order order = findAccessibleOrder(id, accessContext)
                 .orElseThrow(
                         () -> new OrderNotFoundException(id)
                 );
 
         return orderMapper.toOrderResponse(order);
+    }
+
+    private Optional<Order> findAccessibleOrder(
+            Long id,
+            OrderAccessContext accessContext
+    ) {
+        if (accessContext.admin()) {
+            return orderRepository.findById(id);
+        }
+
+        return orderRepository.findByIdAndCustomerId(
+                id,
+                accessContext.customerId()
+        );
     }
 }
