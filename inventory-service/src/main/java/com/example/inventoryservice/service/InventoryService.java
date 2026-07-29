@@ -7,10 +7,13 @@ import com.example.inventoryservice.entity.Inventory;
 import com.example.inventoryservice.exception.InsufficientStockException;
 import com.example.inventoryservice.exception.InventoryAlreadyExistsException;
 import com.example.inventoryservice.exception.InventoryNotFoundException;
+import com.example.inventoryservice.exception.InvalidPaginationException;
 import com.example.inventoryservice.exception.InvalidStockQuantityException;
 import com.example.inventoryservice.mapper.InventoryMapper;
 import com.example.inventoryservice.repository.InventoryRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +51,30 @@ public class InventoryService {
         Inventory inventory = findByProductId(productId);
 
         return inventoryMapper.toInventoryResponse(inventory);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<InventoryResponse> getInventory(Pageable pageable) {
+        return inventoryRepository.findAll(pageable)
+                .map(inventoryMapper::toInventoryResponse);
+    }
+
+    public void validatePagination(
+            int page,
+            int size,
+            int maxPageSize
+    ) {
+        if (page < 0) {
+            throw new InvalidPaginationException(
+                    "page must be zero or greater"
+            );
+        }
+
+        if (size < 1 || size > maxPageSize) {
+            throw new InvalidPaginationException(
+                    "size must be between 1 and " + maxPageSize
+            );
+        }
     }
 
     @Transactional

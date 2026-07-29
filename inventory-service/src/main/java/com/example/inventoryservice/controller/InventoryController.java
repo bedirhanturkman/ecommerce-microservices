@@ -7,6 +7,9 @@ import com.example.inventoryservice.security.PermissionConstants;
 import com.example.inventoryservice.service.InventoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,6 +17,8 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/inventory")
 @RequiredArgsConstructor
 public class InventoryController {
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final InventoryService inventoryService;
 
@@ -23,6 +28,27 @@ public class InventoryController {
             @Valid @RequestBody CreateInventoryRequest request
     ) {
         return inventoryService.createInventory(request);
+    }
+
+    @GetMapping
+    @PreAuthorize(PermissionConstants.IS_ADMIN_OR_SELLER)
+    public Page<InventoryResponse> getInventory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        inventoryService.validatePagination(
+                page,
+                size,
+                MAX_PAGE_SIZE
+        );
+
+        PageRequest pageRequest = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Direction.ASC, "productId")
+        );
+
+        return inventoryService.getInventory(pageRequest);
     }
 
     @GetMapping("/{productId}")
