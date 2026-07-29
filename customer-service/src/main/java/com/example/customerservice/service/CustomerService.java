@@ -1,7 +1,8 @@
 package com.example.customerservice.service;
 
 import com.example.customerservice.dto.CreateCustomerRequest;
-import com.example.customerservice.dto.CustomerInternalResponse;
+import com.example.customerservice.dto.CustomerCredentialsResponse;
+import com.example.customerservice.dto.CustomerRegistrationResponse;
 import com.example.customerservice.dto.CustomerResponse;
 import com.example.customerservice.entity.Customer;
 import com.example.customerservice.mapper.CustomerMapper;
@@ -45,7 +46,9 @@ public class CustomerService {
         return customerMapper.toCustomerResponse(customer);
     }
 
-    public CustomerInternalResponse createCustomerInternal(CreateCustomerRequest request) {
+    public CustomerRegistrationResponse createCustomerInternal(
+            CreateCustomerRequest request
+    ) {
 
         if (customerRepository.existsByEmail(request.email())) {
             throw new RuntimeException("Email already exists");
@@ -55,13 +58,15 @@ public class CustomerService {
 
         Customer savedCustomer = customerRepository.save(customer);
 
-        return customerMapper.toCustomerInternalResponse(savedCustomer);
+        return customerMapper.toCustomerRegistrationResponse(savedCustomer);
     }
 
-    public CustomerInternalResponse getCustomerInternalByEmail(String email) {
+    public CustomerCredentialsResponse getCustomerCredentialsByEmail(
+            String email
+    ) {
         Customer customer = customerRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
 
-        return customerMapper.toCustomerInternalResponse(customer);
+        return customerMapper.toCustomerCredentialsResponse(customer);
     }
 }

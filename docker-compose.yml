@@ -149,6 +149,7 @@ services:
       EUREKA_DEFAULT_ZONE: "http://eureka-server:8761/eureka"
       EUREKA_INSTANCE_HOSTNAME: "config-server"
       JWT_SECRET: "${JWT_SECRET}"
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY}"
 
     volumes:
       - ./config-server/configrepo:/configrepo:ro
@@ -223,6 +224,7 @@ services:
       CONFIG_SERVER_URL: "http://config-server:8888"
       EUREKA_DEFAULT_ZONE: "http://eureka-server:8761/eureka/"
       JWT_SECRET: "${JWT_SECRET}"
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY}"
 
       CUSTOMER_DB_URL: "jdbc:postgresql://postgres:5432/customer_db"
       CUSTOMER_DB_USERNAME: "${POSTGRES_USER:-postgres}"
@@ -304,6 +306,7 @@ services:
       CONFIG_SERVER_URL: "http://config-server:8888"
       EUREKA_DEFAULT_ZONE: "http://eureka-server:8761/eureka/"
       JWT_SECRET: "${JWT_SECRET}"
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY}"
 
     depends_on:
       eureka-server:

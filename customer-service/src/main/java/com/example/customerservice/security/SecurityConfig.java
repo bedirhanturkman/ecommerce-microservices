@@ -65,8 +65,7 @@ public class SecurityConfig {
                         ).permitAll()
 
                         .requestMatchers(
-                                "/api/v1/customers/internal",
-                                "/api/v1/customers/by-email/**"
+                                "/internal/api/v1/customers/**"
                         ).permitAll()
 
                         .anyRequest().authenticated()

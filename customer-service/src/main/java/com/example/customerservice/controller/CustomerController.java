@@ -1,7 +1,6 @@
 package com.example.customerservice.controller;
 
 import com.example.customerservice.dto.CreateCustomerRequest;
-import com.example.customerservice.dto.CustomerInternalResponse;
 import com.example.customerservice.dto.CustomerResponse;
 import com.example.customerservice.security.PermissionConstants;
 import com.example.customerservice.service.CustomerService;
@@ -25,16 +24,6 @@ public class CustomerController {
     @PreAuthorize(PermissionConstants.HAS_ROLE_USER_OR_ADMIN_OR_SELLER)
     public CustomerResponse getCurrentCustomer(Authentication authentication) {
         return customerService.getCustomerByEmail(authentication.getName());
-    }
-
-    @PostMapping("/internal")
-    public CustomerInternalResponse createCustomerInternal(@RequestBody CreateCustomerRequest request) {
-        return customerService.createCustomerInternal(request);
-    }
-
-    @GetMapping("/by-email/{email}")
-    public CustomerInternalResponse getCustomerByEmailInternal(@PathVariable String email) {
-        return customerService.getCustomerInternalByEmail(email);
     }
 
     @GetMapping
