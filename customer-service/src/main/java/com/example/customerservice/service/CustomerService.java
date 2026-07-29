@@ -4,10 +4,13 @@ import com.example.customerservice.dto.CreateCustomerRequest;
 import com.example.customerservice.dto.CustomerCredentialsResponse;
 import com.example.customerservice.dto.CustomerRegistrationResponse;
 import com.example.customerservice.dto.CustomerResponse;
+import com.example.customerservice.dto.UpdateCustomerProfileRequest;
 import com.example.customerservice.entity.Customer;
+import com.example.customerservice.exception.CustomerNotFoundException;
 import com.example.customerservice.mapper.CustomerMapper;
 import com.example.customerservice.repository.CustomerRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -44,6 +47,27 @@ public class CustomerService {
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
 
         return customerMapper.toCustomerResponse(customer);
+    }
+
+    @Transactional
+    public CustomerResponse updateCustomerProfile(
+            String email,
+            UpdateCustomerProfileRequest request
+    ) {
+        Customer customer = customerRepository.findByEmail(email)
+                .orElseThrow(() -> new CustomerNotFoundException(email));
+
+        if (request.firstName() != null) {
+            customer.setFirstName(request.firstName());
+        }
+
+        if (request.lastName() != null) {
+            customer.setLastName(request.lastName());
+        }
+
+        Customer savedCustomer = customerRepository.save(customer);
+
+        return customerMapper.toCustomerResponse(savedCustomer);
     }
 
     public CustomerRegistrationResponse createCustomerInternal(

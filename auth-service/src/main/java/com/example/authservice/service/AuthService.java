@@ -62,6 +62,7 @@ public class AuthService {
 
         String token = jwtService.generateToken(
                 savedCustomer.email(),
+                savedCustomer.id(),
                 savedCustomer.role()
         );
 
@@ -89,6 +90,7 @@ public class AuthService {
 
         String token = jwtService.generateToken(
                 customer.email(),
+                customer.id(),
                 customer.role()
         );
 
