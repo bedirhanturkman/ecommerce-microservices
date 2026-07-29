@@ -2,8 +2,10 @@ package com.example.productservice.controller;
 
 import com.example.productservice.dto.CreateProductRequest;
 import com.example.productservice.dto.ProductResponse;
+import com.example.productservice.dto.UpdateProductRequest;
 import com.example.productservice.security.PermissionConstants;
 import com.example.productservice.service.ProductService;
+import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,6 +25,15 @@ public class ProductController {
     @PreAuthorize(PermissionConstants.HAS_ROLE_ADMIN_OR_SELLER)
     public ProductResponse createProduct(@RequestBody CreateProductRequest request) {
         return productService.createProduct(request);
+    }
+
+    @PatchMapping("/{id}")
+    @PreAuthorize(PermissionConstants.HAS_ROLE_ADMIN_OR_SELLER)
+    public ProductResponse updateProduct(
+            @PathVariable String id,
+            @Valid @RequestBody UpdateProductRequest request
+    ) {
+        return productService.updateProduct(id, request);
     }
 
     @GetMapping
