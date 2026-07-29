@@ -27,6 +27,12 @@ Build Eureka Server with the fixed tag used by its Deployment:
 docker build -t ecommerce/eureka-server:k8s-cf4aa68 ./eureka-server
 ```
 
+Build Config Server with the fixed tag used by its Deployment:
+
+```powershell
+docker build -t ecommerce/config-server:k8s-3da1dd6 ./config-server
+```
+
 Docker Desktop Kubernetes with the kubeadm provisioner uses the local Docker
 image store. The Deployment therefore uses `imagePullPolicy: IfNotPresent`.
 If the cluster is recreated with a different provisioner or runtime, load the
@@ -44,12 +50,18 @@ kubectl apply --dry-run=server -f k8s/base/namespace.yaml
 kubectl apply -f k8s/base/namespace.yaml
 kubectl apply --dry-run=server -f k8s/apps/eureka-server/
 kubectl apply -f k8s/apps/eureka-server/
+kubectl apply --dry-run=client -f k8s/apps/config-server/
+kubectl apply --dry-run=server -f k8s/apps/config-server/
+kubectl apply -f k8s/apps/config-server/configmap.yaml
+kubectl apply -f k8s/apps/config-server/service.yaml
+kubectl apply -f k8s/apps/config-server/deployment.yaml
 ```
 
 Check the rollout and workload:
 
 ```powershell
 kubectl rollout status deployment/eureka-server -n ecommerce
+kubectl rollout status deployment/config-server -n ecommerce
 kubectl get pods,services,endpointslices -n ecommerce
 ```
 
@@ -69,12 +81,29 @@ curl.exe http://localhost:8761/actuator/health/liveness
 curl.exe http://localhost:8761/actuator/health/readiness
 ```
 
+Forward Config Server in a separate terminal:
+
+```powershell
+kubectl port-forward -n ecommerce service/config-server 8888:8888
+```
+
+Check Config Server health and native repository endpoints:
+
+```powershell
+curl.exe http://localhost:8888/actuator/health
+curl.exe http://localhost:8888/actuator/health/liveness
+curl.exe http://localhost:8888/actuator/health/readiness
+curl.exe http://localhost:8888/customer-service/default
+curl.exe http://localhost:8888/api-gateway/default
+```
+
 ## Cleanup
 
-Remove only the Eureka pilot:
+Remove the pilot workloads:
 
 ```powershell
 kubectl delete -f k8s/apps/eureka-server/
+kubectl delete -f k8s/apps/config-server/
 ```
 
 Remove the complete local namespace and everything in it:
