@@ -1,6 +1,9 @@
 server:
   port: 8081
 
+internal:
+  api-key: ${INTERNAL_API_KEY}
+
 spring:
   datasource:
     url: ${CUSTOMER_DB_URL:jdbc:postgresql://localhost:5432/customer_db}

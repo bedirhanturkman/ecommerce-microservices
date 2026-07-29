@@ -2,18 +2,22 @@ package com.example.authservice.service;
 
 import com.example.authservice.dto.AuthResponse;
 import com.example.authservice.dto.CreateCustomerRequest;
-import com.example.authservice.dto.CustomerInternalResponse;
+import com.example.authservice.dto.CustomerCredentialsResponse;
+import com.example.authservice.dto.CustomerRegistrationResponse;
 import com.example.authservice.dto.LoginRequest;
 import com.example.authservice.dto.RegisterRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 
 @Service
 public class AuthService {
 
     private static final String DEFAULT_ROLE = "USER";
+    private static final String INTERNAL_API_KEY_HEADER =
+            "X-Internal-Api-Key";
 
     private final RestClient restClient;
     private final PasswordEncoder passwordEncoder;
@@ -22,12 +26,17 @@ public class AuthService {
     public AuthService(
             @Qualifier("loadBalancedRestClientBuilder") RestClient.Builder restClientBuilder,
             PasswordEncoder passwordEncoder,
-            JwtService jwtService
+            JwtService jwtService,
+            @Value("${internal.api-key}") String internalApiKey
     ) {
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.restClient = restClientBuilder
                 .baseUrl("http://customer-service")
+                .defaultHeader(
+                        INTERNAL_API_KEY_HEADER,
+                        requireInternalApiKey(internalApiKey)
+                )
                 .build();
     }
 
@@ -45,11 +54,11 @@ public class AuthService {
                 role
         );
 
-        CustomerInternalResponse savedCustomer = restClient.post()
-                .uri("/api/v1/customers/internal")
+        CustomerRegistrationResponse savedCustomer = restClient.post()
+                .uri("/internal/api/v1/customers")
                 .body(customerRequest)
                 .retrieve()
-                .body(CustomerInternalResponse.class);
+                .body(CustomerRegistrationResponse.class);
 
         String token = jwtService.generateToken(
                 savedCustomer.email(),
@@ -61,14 +70,17 @@ public class AuthService {
 
     public AuthResponse login(LoginRequest request) {
 
-        CustomerInternalResponse customer = restClient.get()
-                .uri("/api/v1/customers/by-email/{email}", request.email())
+        CustomerCredentialsResponse customer = restClient.get()
+                .uri(
+                        "/internal/api/v1/customers/credentials/by-email/{email}",
+                        request.email()
+                )
                 .retrieve()
-                .body(CustomerInternalResponse.class);
+                .body(CustomerCredentialsResponse.class);
 
         boolean passwordMatches = passwordEncoder.matches(
                 request.password(),
-                customer.password()
+                customer.passwordHash()
         );
 
         if (!passwordMatches) {
@@ -81,5 +93,15 @@ public class AuthService {
         );
 
         return new AuthResponse(token);
+    }
+
+    private static String requireInternalApiKey(String internalApiKey) {
+        if (internalApiKey == null || internalApiKey.isBlank()) {
+            throw new IllegalStateException(
+                    "INTERNAL_API_KEY must be configured"
+            );
+        }
+
+        return internalApiKey;
     }
 }
