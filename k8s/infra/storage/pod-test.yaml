@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: storage-persistence-test
+  namespace: ecommerce
+  labels:
+    app.kubernetes.io/name: storage-persistence-test
+    app.kubernetes.io/component: storage-test
+    app.kubernetes.io/part-of: ecommerce
+spec:
+  restartPolicy: Never
+  containers:
+    - name: marker
+      image: busybox:1.36.1
+      imagePullPolicy: IfNotPresent
+      command:
+        - sh
+        - -c
+        - |
+          if [ ! -f /data/persistence-marker ]; then
+            printf '%s\n' 'ecommerce-storage-persistence-test' \
+              > /data/persistence-marker
+          fi
+          sleep 3600
+      volumeMounts:
+        - name: test-data
+          mountPath: /data
+  volumes:
+    - name: test-data
+      persistentVolumeClaim:
+        claimName: storage-persistence-test

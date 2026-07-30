@@ -480,3 +480,66 @@ monitoring history and Grafana state:
 kubectl delete -f k8s/monitoring/grafana/pvc.yaml
 kubectl delete -f k8s/monitoring/prometheus/pvc.yaml
 ```
+
+## Storage and database backup preparation
+
+Keep PostgreSQL and MongoDB backups outside this repository in a
+user-restricted local directory. Do not commit dumps: they contain real
+database content. Create one PostgreSQL custom-format dump per database with
+`pg_dump -Fc`, validate it with `pg_restore --list`, and record its SHA-256
+checksum. Back up `product_db` with `mongodump`, verify its BSON and metadata
+files, and checksum every backup file. Test restores only in temporary
+databases, compare schemas, indexes, constraints, and exact record counts, then
+remove the temporary databases. Never restore over the active databases.
+
+The disposable storage manifests use the default StorageClass without fixing
+`storageClassName`:
+
+```powershell
+kubectl apply --dry-run=client -f k8s/infra/storage/
+kubectl apply --dry-run=server -f k8s/infra/storage/
+kubectl apply -f k8s/infra/storage/pvc-test.yaml
+kubectl wait --for=jsonpath='{.status.phase}'=Bound `
+  pvc/storage-persistence-test -n ecommerce --timeout=60s
+kubectl apply -f k8s/infra/storage/pod-test.yaml
+kubectl wait --for=condition=Ready pod/storage-persistence-test `
+  -n ecommerce --timeout=60s
+kubectl exec -n ecommerce storage-persistence-test -- `
+  test -f /data/persistence-marker
+```
+
+Delete and recreate only the test pod to prove that its marker remains on the
+PVC:
+
+```powershell
+kubectl delete -f k8s/infra/storage/pod-test.yaml
+kubectl apply -f k8s/infra/storage/pod-test.yaml
+kubectl wait --for=condition=Ready pod/storage-persistence-test `
+  -n ecommerce --timeout=60s
+kubectl exec -n ecommerce storage-persistence-test -- `
+  grep -Fx ecommerce-storage-persistence-test /data/persistence-marker
+kubectl delete -f k8s/infra/storage/pod-test.yaml
+```
+
+Deleting a pod does not delete its PVC. PVC deletion is intentionally a
+separate, destructive step and can delete the stored data. Docker Desktop's
+default `hostpath` StorageClass has reclaim policy `Delete`, so deleting the
+claim can also delete its dynamically provisioned volume. Docker Desktop or
+computer stop/start normally preserves the local cluster, but Kubernetes
+reset/delete can remove hostpath data. Never reset the cluster without verified
+external backups.
+
+Before a database migration, use this rollback sequence:
+
+1. Stop application write traffic.
+2. Stop Kafka producers and consumers in a controlled order.
+3. Take final PostgreSQL and MongoDB backups.
+4. Record source schema and record counts.
+5. Start the Kubernetes database resources.
+6. Restore the verified backups.
+7. Compare schemas, constraints, indexes, and record counts.
+8. Change application database endpoints.
+9. Run smoke and Saga tests.
+10. On failure, stop the Kubernetes application pods.
+11. Restore the Compose database endpoints.
+12. Verify data consistency again before resuming traffic.
