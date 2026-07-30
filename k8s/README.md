@@ -48,6 +48,17 @@ docker build -t ecommerce/product-service:k8s-a6454ba `
   -f product-service/Dockerfile .
 ```
 
+Build the Saga service images with the fixed tags used by their Deployments:
+
+```powershell
+docker build -t ecommerce/order-service:k8s-a91231c `
+  -f order-service/Dockerfile .
+docker build -t ecommerce/inventory-service:k8s-a91231c `
+  -f inventory-service/Dockerfile .
+docker build -t ecommerce/payment-service:k8s-a91231c `
+  -f payment-service/Dockerfile .
+```
+
 Docker Desktop Kubernetes with the kubeadm provisioner uses the local Docker
 image store. The Deployment therefore uses `imagePullPolicy: IfNotPresent`.
 If the cluster is recreated with a different provisioner or runtime, load the
@@ -72,6 +83,30 @@ kubectl create secret generic ecommerce-secrets `
 `k8s/base/secret.example.yaml` documents the required keys only. It must not be
 applied without replacing its placeholders, and real values must never be
 committed.
+
+Before deploying the Saga services, add their database credentials to the
+existing Secret without printing the values:
+
+```powershell
+$dbUser = [Convert]::ToBase64String(
+  [Text.Encoding]::UTF8.GetBytes($env:POSTGRES_USER)
+)
+$dbPassword = [Convert]::ToBase64String(
+  [Text.Encoding]::UTF8.GetBytes($env:POSTGRES_PASSWORD)
+)
+$secretPatch = @{
+  data = @{
+    ORDER_DB_USERNAME = $dbUser
+    ORDER_DB_PASSWORD = $dbPassword
+    INVENTORY_DB_USERNAME = $dbUser
+    INVENTORY_DB_PASSWORD = $dbPassword
+    PAYMENT_DB_USERNAME = $dbUser
+    PAYMENT_DB_PASSWORD = $dbPassword
+  }
+} | ConvertTo-Json -Compress
+kubectl patch secret ecommerce-secrets -n ecommerce `
+  --type merge --patch $secretPatch
+```
 
 Validate and apply the resources:
 
@@ -104,6 +139,19 @@ kubectl apply --dry-run=server -f k8s/apps/product-service/
 kubectl apply -f k8s/apps/product-service/service.yaml
 kubectl apply -f k8s/apps/product-service/deployment.yaml
 kubectl rollout status deployment/product-service -n ecommerce
+docker compose stop order-service inventory-service payment-service
+kubectl apply --dry-run=client -f k8s/apps/order-service/
+kubectl apply --dry-run=client -f k8s/apps/inventory-service/
+kubectl apply --dry-run=client -f k8s/apps/payment-service/
+kubectl apply --dry-run=server -f k8s/apps/order-service/
+kubectl apply --dry-run=server -f k8s/apps/inventory-service/
+kubectl apply --dry-run=server -f k8s/apps/payment-service/
+kubectl apply -f k8s/apps/order-service/
+kubectl rollout status deployment/order-service -n ecommerce
+kubectl apply -f k8s/apps/inventory-service/
+kubectl rollout status deployment/inventory-service -n ecommerce
+kubectl apply -f k8s/apps/payment-service/
+kubectl rollout status deployment/payment-service -n ecommerce
 ```
 
 Check the rollout and workload:
@@ -115,6 +163,9 @@ kubectl rollout status deployment/customer-service -n ecommerce
 kubectl rollout status deployment/auth-service -n ecommerce
 kubectl rollout status deployment/api-gateway -n ecommerce
 kubectl rollout status deployment/product-service -n ecommerce
+kubectl rollout status deployment/order-service -n ecommerce
+kubectl rollout status deployment/inventory-service -n ecommerce
+kubectl rollout status deployment/payment-service -n ecommerce
 kubectl get pods,services,endpointslices -n ecommerce
 ```
 
@@ -208,6 +259,13 @@ an unauthenticated write receives `401`, an unknown product returns `404`, and
 a duplicate product name returns `409`. Do not print JWT values in smoke-test
 output.
 
+For the Saga smoke test, use the Gateway NodePort and a valid USER token to
+create orders against products with prepared inventory. Verify successful,
+insufficient-stock, and simulated-payment-failure flows. Check final order
+status, inventory reservation or compensation, payment state, processed-event
+idempotency rows, and each service's outbox transition from `PENDING` to
+`PUBLISHED`. Do not print JWTs, credentials, or complete Kafka payloads.
+
 ## Self-healing
 
 Delete one pod at a time and wait for its Deployment before testing the
@@ -229,6 +287,18 @@ kubectl rollout status deployment/api-gateway -n ecommerce
 kubectl delete pod -n ecommerce `
   -l app.kubernetes.io/name=product-service
 kubectl rollout status deployment/product-service -n ecommerce
+
+kubectl delete pod -n ecommerce `
+  -l app.kubernetes.io/name=order-service
+kubectl rollout status deployment/order-service -n ecommerce
+
+kubectl delete pod -n ecommerce `
+  -l app.kubernetes.io/name=inventory-service
+kubectl rollout status deployment/inventory-service -n ecommerce
+
+kubectl delete pod -n ecommerce `
+  -l app.kubernetes.io/name=payment-service
+kubectl rollout status deployment/payment-service -n ecommerce
 ```
 
 ## Cleanup
@@ -242,7 +312,20 @@ kubectl delete -f k8s/apps/api-gateway/
 kubectl delete -f k8s/apps/auth-service/
 kubectl delete -f k8s/apps/customer-service/
 kubectl delete -f k8s/apps/product-service/
+kubectl delete -f k8s/apps/payment-service/
+kubectl delete -f k8s/apps/inventory-service/
+kubectl delete -f k8s/apps/order-service/
 kubectl delete secret ecommerce-secrets -n ecommerce
+```
+
+To roll back only the Saga services, delete them in reverse order and then
+restart their Compose instances:
+
+```powershell
+kubectl delete -f k8s/apps/payment-service/
+kubectl delete -f k8s/apps/inventory-service/
+kubectl delete -f k8s/apps/order-service/
+docker compose up -d order-service inventory-service payment-service
 ```
 
 Remove the complete local namespace and everything in it:
@@ -270,5 +353,11 @@ kubectl delete -f k8s/base/namespace.yaml
 - Product Service reaches MongoDB through
   `mongodb://host.docker.internal:27017/product_db`; this is a Docker
   Desktop-specific local dependency.
+- PostgreSQL and Kafka remain in Docker Compose for the Saga services.
+- Kafka keeps `localhost:9092` for host clients and advertises the separate
+  `host.docker.internal:29093` listener to Kubernetes pods.
+- Never run Compose and Kubernetes instances of Order, Inventory, or Payment
+  together without an intentional consumer-group migration; doing so causes
+  rebalances and makes test-event ownership nondeterministic.
 - Real JWT secrets, internal API keys, and database credentials must never be
   written to repository files, command output, logs, or test reports.
