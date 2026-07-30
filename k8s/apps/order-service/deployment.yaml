@@ -51,7 +51,7 @@ spec:
                   name: ecommerce-secrets
                   key: ORDER_DB_PASSWORD
             - name: KAFKA_BOOTSTRAP_SERVERS
-              value: host.docker.internal:29093
+              value: kafka:9092
           ports:
             - name: http
               containerPort: 8082
