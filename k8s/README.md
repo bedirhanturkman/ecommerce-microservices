@@ -614,3 +614,51 @@ five manifest endpoints to `host.docker.internal`, apply them, scale customer
 and product up before the Saga services, and rerun smoke and Saga tests. Keep
 all Kubernetes PVCs, external backups, and Compose named volumes until data
 consistency has been independently confirmed.
+
+## Kafka migration
+
+Kafka runs as a single-broker KRaft StatefulSet for local development. Apply
+the headless and client Services before the StatefulSet:
+
+```powershell
+kubectl apply -f k8s/infra/kafka/service.yaml
+kubectl apply -f k8s/infra/kafka/statefulset.yaml
+kubectl rollout status statefulset/kafka -n ecommerce
+```
+
+The non-secret KRaft `CLUSTER_ID` is generated once with
+`kafka-storage.sh random-uuid` and remains fixed in the StatefulSet. Kafka data
+is stored at `/var/lib/kafka/data` on the 5Gi `kafka-data-kafka-0` PVC. Do not
+delete this PVC. Docker Desktop Kubernetes reset/delete can also destroy its
+local `hostpath` data.
+
+After the broker is Ready, explicitly create these topics with three
+partitions and replication factor one: `order-created`, `order-created-dlt`,
+`inventory-reserved`, `inventory-reservation-failed`, `payment-succeeded`,
+and `payment-failed`. Do not manually create internal Kafka topics.
+
+Before cutover, verify final Saga states, all outbox `PENDING` counts, consumer
+lag, and topic end offsets. Then stop producers and consumers:
+
+```powershell
+kubectl scale deployment/order-service deployment/inventory-service `
+  deployment/payment-service -n ecommerce --replicas=0
+```
+
+Apply the three Deployment manifests with `KAFKA_BOOTSTRAP_SERVERS=kafka:9092`.
+Start `inventory-service`, then `payment-service`, and finally
+`order-service`, returning each to one replica. Verify consumer membership and
+zero lag before creating a new order.
+
+Run successful, insufficient-stock, and payment-failure Saga tests; verify
+compensation, ownership, outbox publication, and idempotency. With no active
+Saga, delete only `kafka-0` and confirm that the StatefulSet recreates it with
+the same cluster ID, PVC, topics, partition offsets, leaders, and ISR.
+
+Compose Kafka may be stopped only after all tests pass. Never remove its
+container, anonymous volumes, or `/tmp/kafka-logs` data. For rollback, scale
+the three Saga services to zero, start Compose Kafka, restore their bootstrap
+override to `host.docker.internal:29093`, apply the manifests, then start
+Inventory and Payment before Order and repeat health, lag, and Saga tests.
+Never delete either Kafka data set during rollback. A single broker and RF=1
+provide no high availability and are not production topology.
