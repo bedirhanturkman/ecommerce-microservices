@@ -39,7 +39,7 @@ spec:
                   name: ecommerce-secrets
                   key: JWT_SECRET
             - name: ORDER_DB_URL
-              value: jdbc:postgresql://host.docker.internal:5432/order_db
+              value: jdbc:postgresql://postgres:5432/order_db
             - name: ORDER_DB_USERNAME
               valueFrom:
                 secretKeyRef:

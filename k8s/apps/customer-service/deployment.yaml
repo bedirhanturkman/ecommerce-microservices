@@ -44,7 +44,7 @@ spec:
                   name: ecommerce-secrets
                   key: INTERNAL_API_KEY
             - name: CUSTOMER_DB_URL
-              value: jdbc:postgresql://host.docker.internal:5432/customer_db
+              value: jdbc:postgresql://postgres:5432/customer_db
             - name: CUSTOMER_DB_USERNAME
               valueFrom:
                 secretKeyRef:
