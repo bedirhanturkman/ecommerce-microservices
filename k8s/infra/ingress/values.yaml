@@ -1,0 +1,51 @@
+deployment:
+  replicas: 1
+
+ingressClass:
+  enabled: true
+  isDefaultClass: false
+  name: traefik
+
+providers:
+  kubernetesCRD:
+    enabled: false
+  kubernetesIngress:
+    enabled: true
+  kubernetesGateway:
+    enabled: false
+
+api:
+  dashboard: false
+  insecure: false
+
+ingressRoute:
+  dashboard:
+    enabled: false
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+metrics:
+  prometheus: null
+
+ports:
+  metrics: null
+  web:
+    asDefault: true
+    expose:
+      default: true
+    exposedPort: 80
+  websecure: null
+
+service:
+  spec:
+    type: LoadBalancer
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

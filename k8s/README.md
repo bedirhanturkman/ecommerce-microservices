@@ -662,3 +662,89 @@ override to `host.docker.internal:29093`, apply the manifests, then start
 Inventory and Payment before Order and repeat health, lag, and Saga tests.
 Never delete either Kafka data set during rollback. A single broker and RF=1
 provide no high availability and are not production topology.
+
+## Local API ingress
+
+The local cluster uses Traefik instead of ingress-nginx, which is retired.
+Traefik is installed from the official `https://traefik.github.io/charts`
+Helm repository with chart version `41.1.0` explicitly pinned. This
+configuration enables only the Kubernetes Ingress provider, exposes local
+HTTP, and does not expose the Traefik dashboard or configure TLS.
+
+Prepare and inspect the release before installation:
+
+```powershell
+helm repo add traefik https://traefik.github.io/charts
+helm repo update traefik
+$chartDir = Join-Path $env:TEMP "traefik-chart-41.1.0"
+New-Item -ItemType Directory -Force $chartDir | Out-Null
+helm pull traefik/traefik --version 41.1.0 --untar --untardir $chartDir
+helm lint "$chartDir/traefik" `
+  -f k8s/infra/ingress/values.yaml
+helm template traefik traefik/traefik --version 41.1.0 `
+  --namespace traefik --skip-crds -f k8s/infra/ingress/values.yaml
+```
+
+Install or upgrade the `traefik` release in its own namespace, wait for the
+controller, and then apply the application Ingress:
+
+```powershell
+helm upgrade --install traefik traefik/traefik --version 41.1.0 `
+  --namespace traefik --create-namespace --skip-crds `
+  -f k8s/infra/ingress/values.yaml --wait
+kubectl apply -f k8s/infra/ingress/ingress.yaml
+kubectl get deployment,service -n traefik
+kubectl get ingressclass
+kubectl get ingress ecommerce-api -n ecommerce
+```
+
+The Ingress routes `http://ecommerce.local/` to `api-gateway:8080`. Without
+changing the Windows hosts file, test it using the LoadBalancer address:
+
+```powershell
+curl.exe --resolve ecommerce.local:80:127.0.0.1 `
+  http://ecommerce.local/actuator/health
+```
+
+If Docker Desktop returns a different reachable LoadBalancer address, replace
+`127.0.0.1` in the test. An optional manual hosts entry is:
+
+```text
+127.0.0.1 ecommerce.local
+```
+
+The `/` prefix also preserves the Gateway's existing local
+`/actuator/health` behavior; no new Actuator route is created. Run register,
+login, authenticated profile, product, order, and all three Saga tests through
+the hostname. Verify compensation, zero pending outbox events, and zero Kafka
+consumer lag. The existing Gateway NodePort remains the fallback:
+
+```powershell
+curl.exe http://localhost:32323/actuator/health
+```
+
+With no active Saga, delete only the Traefik pod and confirm that its
+Deployment recreates it, reloads `ecommerce-api`, and serves an authenticated
+request. The Gateway NodePort must remain available throughout this test.
+
+To roll back application routing, remove only the Ingress and continue through
+NodePort `32323`:
+
+```powershell
+kubectl delete -f k8s/infra/ingress/ingress.yaml
+```
+
+If no other Ingress depends on Traefik, uninstall the controller separately:
+
+```powershell
+kubectl get ingress -A
+helm uninstall traefik -n traefik
+kubectl get all -n traefik
+```
+
+Inspect the namespace before deleting it, and remove any manually added hosts
+entry separately. Docker Desktop Kubernetes reset/delete removes the
+controller and may destroy local PVC data; reinstall from the pinned chart
+after a reset and do not reset without verified database and Kafka backups.
+This setup is unencrypted local HTTP only and is not a production ingress
+configuration.
