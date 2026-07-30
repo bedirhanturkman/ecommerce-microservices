@@ -41,6 +41,13 @@ docker build -t ecommerce/auth-service:k8s-26faf35 -f auth-service/Dockerfile .
 docker build -t ecommerce/customer-service:k8s-26faf35 -f customer-service/Dockerfile .
 ```
 
+Build Product Service with the fixed tag used by its Deployment:
+
+```powershell
+docker build -t ecommerce/product-service:k8s-a6454ba `
+  -f product-service/Dockerfile .
+```
+
 Docker Desktop Kubernetes with the kubeadm provisioner uses the local Docker
 image store. The Deployment therefore uses `imagePullPolicy: IfNotPresent`.
 If the cluster is recreated with a different provisioner or runtime, load the
@@ -92,6 +99,11 @@ kubectl apply -f k8s/apps/auth-service/
 kubectl rollout status deployment/auth-service -n ecommerce
 kubectl apply -f k8s/apps/api-gateway/
 kubectl rollout status deployment/api-gateway -n ecommerce
+kubectl apply --dry-run=client -f k8s/apps/product-service/
+kubectl apply --dry-run=server -f k8s/apps/product-service/
+kubectl apply -f k8s/apps/product-service/service.yaml
+kubectl apply -f k8s/apps/product-service/deployment.yaml
+kubectl rollout status deployment/product-service -n ecommerce
 ```
 
 Check the rollout and workload:
@@ -102,6 +114,7 @@ kubectl rollout status deployment/config-server -n ecommerce
 kubectl rollout status deployment/customer-service -n ecommerce
 kubectl rollout status deployment/auth-service -n ecommerce
 kubectl rollout status deployment/api-gateway -n ecommerce
+kubectl rollout status deployment/product-service -n ecommerce
 kubectl get pods,services,endpointslices -n ecommerce
 ```
 
@@ -188,6 +201,13 @@ The customer profile endpoint must return `401` without a token. Requests to
 `/internal/**` through the Gateway must not expose Customer Service internal
 endpoints.
 
+Product Service uses the same Gateway NodePort. With a valid USER token, verify
+the product list and get endpoints. With a SELLER or ADMIN token, create and
+patch a uniquely named product. Verify that a USER receives `403` for writes,
+an unauthenticated write receives `401`, an unknown product returns `404`, and
+a duplicate product name returns `409`. Do not print JWT values in smoke-test
+output.
+
 ## Self-healing
 
 Delete one pod at a time and wait for its Deployment before testing the
@@ -205,6 +225,10 @@ kubectl rollout status deployment/auth-service -n ecommerce
 kubectl delete pod -n ecommerce `
   -l app.kubernetes.io/name=api-gateway
 kubectl rollout status deployment/api-gateway -n ecommerce
+
+kubectl delete pod -n ecommerce `
+  -l app.kubernetes.io/name=product-service
+kubectl rollout status deployment/product-service -n ecommerce
 ```
 
 ## Cleanup
@@ -217,6 +241,7 @@ kubectl delete -f k8s/apps/config-server/
 kubectl delete -f k8s/apps/api-gateway/
 kubectl delete -f k8s/apps/auth-service/
 kubectl delete -f k8s/apps/customer-service/
+kubectl delete -f k8s/apps/product-service/
 kubectl delete secret ecommerce-secrets -n ecommerce
 ```
 
@@ -240,5 +265,10 @@ kubectl delete -f k8s/base/namespace.yaml
   Kubernetes.
 - Customer Service reaches the Compose PostgreSQL port through
   `host.docker.internal`; this is a Docker Desktop-specific local dependency.
+- MongoDB temporarily remains in Docker Compose and is not deployed to
+  Kubernetes.
+- Product Service reaches MongoDB through
+  `mongodb://host.docker.internal:27017/product_db`; this is a Docker
+  Desktop-specific local dependency.
 - Real JWT secrets, internal API keys, and database credentials must never be
   written to repository files, command output, logs, or test reports.
