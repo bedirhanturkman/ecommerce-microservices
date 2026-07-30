@@ -361,3 +361,122 @@ kubectl delete -f k8s/base/namespace.yaml
   rebalances and makes test-event ownership nondeterministic.
 - Real JWT secrets, internal API keys, and database credentials must never be
   written to repository files, command output, logs, or test reports.
+
+## Kubernetes monitoring
+
+Prometheus and Grafana use the same pinned image versions as the Compose
+environment:
+
+- `prom/prometheus:v3.13.1`
+- `grafana/grafana:13.1.1`
+
+Create the Grafana admin Secret manually. Replace the shell variable locally;
+never put its real value in a manifest, README, log, test report, or Git diff:
+
+```powershell
+$grafanaAdminPassword = Read-Host -AsSecureString
+$grafanaAdminPasswordText = [System.Net.NetworkCredential]::new(
+  "", $grafanaAdminPassword
+).Password
+kubectl create secret generic grafana-admin -n ecommerce `
+  --from-literal=admin-password="$grafanaAdminPasswordText"
+Remove-Variable grafanaAdminPasswordText
+```
+
+Validate the resources before applying them:
+
+```powershell
+kubectl apply --dry-run=client -f k8s/monitoring/prometheus/
+kubectl apply --dry-run=client -f k8s/monitoring/grafana/
+kubectl apply --dry-run=server -f k8s/monitoring/prometheus/
+kubectl apply --dry-run=server -f k8s/monitoring/grafana/
+```
+
+Apply persistent storage and configuration first, then Prometheus:
+
+```powershell
+kubectl apply -f k8s/monitoring/prometheus/pvc.yaml
+kubectl apply -f k8s/monitoring/prometheus/configmap.yaml
+kubectl apply -f k8s/monitoring/prometheus/service.yaml
+kubectl apply -f k8s/monitoring/prometheus/deployment.yaml
+kubectl rollout status deployment/prometheus -n ecommerce
+```
+
+Check Prometheus locally and inspect target health:
+
+```powershell
+kubectl port-forward -n ecommerce service/prometheus 9090:9090
+curl.exe http://localhost:9090/-/healthy
+curl.exe http://localhost:9090/-/ready
+curl.exe "http://localhost:9090/api/v1/targets"
+```
+
+After all Prometheus targets are `UP`, apply Grafana:
+
+```powershell
+kubectl apply -f k8s/monitoring/grafana/pvc.yaml
+kubectl apply -f k8s/monitoring/grafana/configmap.yaml
+kubectl apply -f k8s/monitoring/grafana/service.yaml
+kubectl apply -f k8s/monitoring/grafana/deployment.yaml
+kubectl rollout status deployment/grafana -n ecommerce
+kubectl get service grafana -n ecommerce `
+  -o jsonpath='{.spec.ports[0].nodePort}'
+```
+
+Docker Desktop publishes the assigned Grafana NodePort on localhost. A
+port-forward can be used instead:
+
+```powershell
+kubectl port-forward -n ecommerce service/grafana 3000:3000
+curl.exe http://localhost:3000/api/health
+```
+
+In Grafana, confirm that the provisioned `Prometheus` datasource uses UID
+`prometheus`, reports a successful connection, and that the E-Commerce
+dashboard is loaded. Its existing queries, including
+`ecommerce_orders_total` and
+`ecommerce_inventory_reservations_total`, must remain unchanged.
+
+The Prometheus configuration uses Kubernetes Service DNS names and
+`/actuator/prometheus` for Eureka, Config Server, Gateway, Auth, Customer,
+Product, Order, Inventory, and Payment. This ClusterIP scrape approach is
+appropriate while every application has one replica. If a Service is scaled
+to multiple pods, scraping its ClusterIP does not guarantee that every pod
+instance is collected separately; migrate to Kubernetes service discovery or
+pod annotations before scaling.
+
+Prometheus and Grafana have separate PVCs named `prometheus-data` and
+`grafana-data`. The default StorageClass is used. Delete each monitoring pod
+and wait for its replacement to test self-healing and persistence:
+
+```powershell
+kubectl delete pod -n ecommerce -l app.kubernetes.io/name=prometheus
+kubectl rollout status deployment/prometheus -n ecommerce
+kubectl delete pod -n ecommerce -l app.kubernetes.io/name=grafana
+kubectl rollout status deployment/grafana -n ecommerce
+kubectl get pvc -n ecommerce prometheus-data grafana-data
+```
+
+The CPU and memory requests/limits in these manifests are local-development
+starting values and must be tuned from observed usage.
+
+Roll back Kubernetes monitoring without deleting its data:
+
+```powershell
+kubectl delete -f k8s/monitoring/grafana/deployment.yaml
+kubectl delete -f k8s/monitoring/grafana/service.yaml
+kubectl delete -f k8s/monitoring/grafana/configmap.yaml
+kubectl delete secret grafana-admin -n ecommerce
+kubectl delete -f k8s/monitoring/prometheus/deployment.yaml
+kubectl delete -f k8s/monitoring/prometheus/service.yaml
+kubectl delete -f k8s/monitoring/prometheus/configmap.yaml
+docker compose up -d prometheus grafana
+```
+
+PVC cleanup is intentionally separate because it permanently removes local
+monitoring history and Grafana state:
+
+```powershell
+kubectl delete -f k8s/monitoring/grafana/pvc.yaml
+kubectl delete -f k8s/monitoring/prometheus/pvc.yaml
+```
