@@ -39,7 +39,7 @@ spec:
                   name: ecommerce-secrets
                   key: JWT_SECRET
             - name: PRODUCT_MONGODB_URI
-              value: mongodb://host.docker.internal:27017/product_db
+              value: mongodb://mongodb:27017/product_db
           ports:
             - name: http
               containerPort: 8083

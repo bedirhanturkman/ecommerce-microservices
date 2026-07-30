@@ -543,3 +543,74 @@ Before a database migration, use this rollback sequence:
 10. On failure, stop the Kubernetes application pods.
 11. Restore the Compose database endpoints.
 12. Verify data consistency again before resuming traffic.
+
+## PostgreSQL and MongoDB migration
+
+PostgreSQL and MongoDB run as single-replica StatefulSets for local
+development; this provides stable identity and persistent storage, not high
+availability. Both use the default StorageClass. Never delete their PVCs,
+Compose named volumes, or external backups as part of a rollout or rollback.
+Docker Desktop Kubernetes reset/delete can destroy local `hostpath` data.
+
+PostgreSQL reuses the equal database username/password values already stored
+under `CUSTOMER_DB_USERNAME` and `CUSTOMER_DB_PASSWORD` in
+`ecommerce-secrets`. MongoDB retains the existing local no-auth model and is
+exposed only through ClusterIP Services. No real secret belongs in Git.
+
+Before cutover, record exact counts, confirm no active Saga or pending outbox
+work, then scale down in this order:
+
+```powershell
+kubectl scale deployment/order-service deployment/inventory-service `
+  deployment/payment-service -n ecommerce --replicas=0
+kubectl scale deployment/customer-service deployment/product-service `
+  -n ecommerce --replicas=0
+```
+
+Take final external `pg_dump -Fc` and `mongodump` backups, record SHA-256
+checksums, and validate them before applying database resources:
+
+```powershell
+kubectl apply -f k8s/infra/postgres/service.yaml
+kubectl apply -f k8s/infra/postgres/statefulset.yaml
+kubectl rollout status statefulset/postgres -n ecommerce
+kubectl apply -f k8s/infra/mongodb/service.yaml
+kubectl apply -f k8s/infra/mongodb/statefulset.yaml
+kubectl rollout status statefulset/mongodb -n ecommerce
+```
+
+Create the four empty PostgreSQL databases, copy only the verified final dumps
+temporarily to `postgres-0`, and restore each with
+`pg_restore --exit-on-error`. Copy the verified MongoDB dump temporarily to
+`mongodb-0` and restore `product_db` with `mongorestore`. Stop immediately on
+any restore error. Remove only the temporary in-pod dump copies afterward.
+Before starting applications, compare exact counts, table/collection lists,
+PostgreSQL constraints and indexes, and MongoDB indexes with the final source
+snapshot.
+
+Apply and start applications in dependency order:
+
+```powershell
+kubectl apply -f k8s/apps/customer-service/deployment.yaml
+kubectl apply -f k8s/apps/product-service/deployment.yaml
+kubectl scale deployment/customer-service deployment/product-service `
+  -n ecommerce --replicas=1
+kubectl apply -f k8s/apps/order-service/deployment.yaml
+kubectl apply -f k8s/apps/inventory-service/deployment.yaml
+kubectl apply -f k8s/apps/payment-service/deployment.yaml
+kubectl scale deployment/order-service deployment/inventory-service `
+  deployment/payment-service -n ecommerce --replicas=1
+```
+
+After smoke and Saga tests, delete `postgres-0` and `mongodb-0` separately and
+verify that each StatefulSet recreates the same pod identity, reattaches its
+PVC, and preserves exact counts. Do not run this during an active Saga.
+Compose PostgreSQL and MongoDB may be stopped only after all regression tests
+pass; never remove their containers or named volumes.
+
+For rollback, scale the five writing applications to zero, stop new writes to
+the Kubernetes databases, start Compose PostgreSQL and MongoDB, restore the
+five manifest endpoints to `host.docker.internal`, apply them, scale customer
+and product up before the Saga services, and rerun smoke and Saga tests. Keep
+all Kubernetes PVCs, external backups, and Compose named volumes until data
+consistency has been independently confirmed.
