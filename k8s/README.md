@@ -1,14 +1,53 @@
 # Local Kubernetes
 
-This directory contains the initial Kubernetes resources for the local
-Docker Desktop cluster. The first pilot workload is Eureka Server.
+This directory contains the complete local Kubernetes architecture for the
+Docker Desktop cluster.
+
+## Current architecture
+
+All application services run in the `ecommerce` namespace. Eureka Server,
+Config Server, API Gateway, Auth, Customer, Product, Order, Inventory, and
+Payment are stateless Deployments. PostgreSQL, MongoDB, and Kafka run as
+single-replica StatefulSets with persistent storage. Prometheus and Grafana
+also run in Kubernetes with dedicated PVCs.
+
+The active in-cluster endpoints are:
+
+- PostgreSQL: `postgres:5432`
+- MongoDB: `mongodb:27017`
+- Kafka: `kafka:9092`
+- Config Server: `config-server:8888`
+- Eureka Server: `eureka-server:8761`
+
+Local external access is:
+
+- API through Traefik Ingress: `http://ecommerce.local`
+- API Gateway NodePort fallback: `http://localhost:32323`
+- Grafana NodePort: `http://localhost:30305`
+
+Test the Ingress without changing the Windows hosts file:
+
+```powershell
+curl.exe --resolve ecommerce.local:80:127.0.0.1 `
+  http://ecommerce.local/actuator/health
+```
+
+The optional Windows hosts entry is:
+
+```text
+127.0.0.1 ecommerce.local
+```
+
+This is a local HTTP environment; TLS is not configured. The stopped Compose
+PostgreSQL, MongoDB, and Kafka containers and their volumes are retained only
+for rollback. Kubernetes applications do not use them during normal operation.
 
 ## Prerequisites
 
 - Docker Desktop Kubernetes is enabled.
 - The active context is `docker-desktop`.
 - The cluster node is ready.
-- `kubectl` and Docker CLI are available.
+- `kubectl`, Docker CLI, and Helm are available.
 
 Verify the environment:
 
@@ -67,9 +106,36 @@ Deployment.
 
 ## Apply
 
-Create the shared Secret before deploying the core services. Do not commit or
-paste real values into a manifest. The following example reads the values from
-the current PowerShell process environment:
+Use this order for a clean cluster. Stop if a dependency, restore validation,
+or rollout fails.
+
+1. Verify the Kubernetes context.
+2. Create the `ecommerce` namespace.
+3. Create required Secrets from local environment variables.
+4. Apply Eureka Server.
+5. Apply Config Server.
+6. Apply PostgreSQL and MongoDB.
+7. Restore verified backups and compare exact data/schema metadata.
+8. Apply Kafka.
+9. Create the six business topics.
+10. Apply API Gateway, Auth, Customer, Product, Inventory, Payment, and Order.
+11. Apply Prometheus and Grafana.
+12. Install the pinned Traefik Helm release.
+13. Apply the API Ingress.
+14. Run the complete acceptance suite.
+
+First verify the context and create the namespace:
+
+```powershell
+kubectl config current-context
+kubectl get nodes
+kubectl apply --dry-run=client -f k8s/base/namespace.yaml
+kubectl apply --dry-run=server -f k8s/base/namespace.yaml
+kubectl apply -f k8s/base/namespace.yaml
+```
+
+Create the shared Secret only after the namespace exists. Do not commit or
+print real values. This example reads them from the current PowerShell process:
 
 ```powershell
 kubectl create secret generic ecommerce-secrets `
@@ -77,104 +143,96 @@ kubectl create secret generic ecommerce-secrets `
   --from-literal=JWT_SECRET="$env:JWT_SECRET" `
   --from-literal=INTERNAL_API_KEY="$env:INTERNAL_API_KEY" `
   --from-literal=CUSTOMER_DB_USERNAME="$env:POSTGRES_USER" `
-  --from-literal=CUSTOMER_DB_PASSWORD="$env:POSTGRES_PASSWORD"
+  --from-literal=CUSTOMER_DB_PASSWORD="$env:POSTGRES_PASSWORD" `
+  --from-literal=ORDER_DB_USERNAME="$env:POSTGRES_USER" `
+  --from-literal=ORDER_DB_PASSWORD="$env:POSTGRES_PASSWORD" `
+  --from-literal=INVENTORY_DB_USERNAME="$env:POSTGRES_USER" `
+  --from-literal=INVENTORY_DB_PASSWORD="$env:POSTGRES_PASSWORD" `
+  --from-literal=PAYMENT_DB_USERNAME="$env:POSTGRES_USER" `
+  --from-literal=PAYMENT_DB_PASSWORD="$env:POSTGRES_PASSWORD"
 ```
 
 `k8s/base/secret.example.yaml` documents the required keys only. It must not be
 applied without replacing its placeholders, and real values must never be
 committed.
 
-Before deploying the Saga services, add their database credentials to the
-existing Secret without printing the values:
+Apply Eureka and Config Server first:
 
 ```powershell
-$dbUser = [Convert]::ToBase64String(
-  [Text.Encoding]::UTF8.GetBytes($env:POSTGRES_USER)
-)
-$dbPassword = [Convert]::ToBase64String(
-  [Text.Encoding]::UTF8.GetBytes($env:POSTGRES_PASSWORD)
-)
-$secretPatch = @{
-  data = @{
-    ORDER_DB_USERNAME = $dbUser
-    ORDER_DB_PASSWORD = $dbPassword
-    INVENTORY_DB_USERNAME = $dbUser
-    INVENTORY_DB_PASSWORD = $dbPassword
-    PAYMENT_DB_USERNAME = $dbUser
-    PAYMENT_DB_PASSWORD = $dbPassword
-  }
-} | ConvertTo-Json -Compress
-kubectl patch secret ecommerce-secrets -n ecommerce `
-  --type merge --patch $secretPatch
-```
-
-Validate and apply the resources:
-
-```powershell
-kubectl apply --dry-run=client -f k8s/base/namespace.yaml
 kubectl apply --dry-run=client -f k8s/apps/eureka-server/
-kubectl apply --dry-run=server -f k8s/base/namespace.yaml
-kubectl apply -f k8s/base/namespace.yaml
 kubectl apply --dry-run=server -f k8s/apps/eureka-server/
 kubectl apply -f k8s/apps/eureka-server/
+kubectl rollout status deployment/eureka-server -n ecommerce
 kubectl apply --dry-run=client -f k8s/apps/config-server/
 kubectl apply --dry-run=server -f k8s/apps/config-server/
-kubectl apply -f k8s/apps/config-server/configmap.yaml
-kubectl apply -f k8s/apps/config-server/service.yaml
-kubectl apply -f k8s/apps/config-server/deployment.yaml
-kubectl apply --dry-run=client -f k8s/apps/customer-service/
-kubectl apply --dry-run=client -f k8s/apps/auth-service/
-kubectl apply --dry-run=client -f k8s/apps/api-gateway/
-kubectl apply --dry-run=server -f k8s/apps/customer-service/
-kubectl apply --dry-run=server -f k8s/apps/auth-service/
-kubectl apply --dry-run=server -f k8s/apps/api-gateway/
-kubectl apply -f k8s/apps/customer-service/
-kubectl rollout status deployment/customer-service -n ecommerce
-kubectl apply -f k8s/apps/auth-service/
-kubectl rollout status deployment/auth-service -n ecommerce
+kubectl apply -f k8s/apps/config-server/
+kubectl rollout status deployment/config-server -n ecommerce
+```
+
+Apply PostgreSQL and MongoDB, then restore only verified external backups as
+described in the database migration section. Do not start database clients
+until exact counts, constraints, and indexes match:
+
+```powershell
+kubectl apply -f k8s/infra/postgres/service.yaml
+kubectl apply -f k8s/infra/postgres/statefulset.yaml
+kubectl rollout status statefulset/postgres -n ecommerce
+kubectl apply -f k8s/infra/mongodb/service.yaml
+kubectl apply -f k8s/infra/mongodb/statefulset.yaml
+kubectl rollout status statefulset/mongodb -n ecommerce
+```
+
+Apply Kafka after database restore validation. Create the six business topics
+with three partitions and replication factor one; do not create internal
+topics manually:
+
+```powershell
+kubectl apply -f k8s/infra/kafka/service.yaml
+kubectl apply -f k8s/infra/kafka/statefulset.yaml
+kubectl rollout status statefulset/kafka -n ecommerce
+
+$topics = @(
+  "order-created",
+  "order-created-dlt",
+  "inventory-reserved",
+  "inventory-reservation-failed",
+  "payment-succeeded",
+  "payment-failed"
+)
+foreach ($topic in $topics) {
+  kubectl exec -n ecommerce kafka-0 -- `
+    /opt/kafka/bin/kafka-topics.sh `
+    --bootstrap-server localhost:9092 `
+    --create --if-not-exists `
+    --topic $topic --partitions 3 --replication-factor 1
+}
+```
+
+Apply application Services and Deployments. Start Inventory and Payment before
+Order so consumers are ready before a new order event can be produced:
+
+```powershell
 kubectl apply -f k8s/apps/api-gateway/
-kubectl rollout status deployment/api-gateway -n ecommerce
-kubectl apply --dry-run=client -f k8s/apps/product-service/
-kubectl apply --dry-run=server -f k8s/apps/product-service/
-kubectl apply -f k8s/apps/product-service/service.yaml
-kubectl apply -f k8s/apps/product-service/deployment.yaml
-kubectl rollout status deployment/product-service -n ecommerce
-docker compose stop order-service inventory-service payment-service
-kubectl apply --dry-run=client -f k8s/apps/order-service/
-kubectl apply --dry-run=client -f k8s/apps/inventory-service/
-kubectl apply --dry-run=client -f k8s/apps/payment-service/
-kubectl apply --dry-run=server -f k8s/apps/order-service/
-kubectl apply --dry-run=server -f k8s/apps/inventory-service/
-kubectl apply --dry-run=server -f k8s/apps/payment-service/
-kubectl apply -f k8s/apps/order-service/
-kubectl rollout status deployment/order-service -n ecommerce
+kubectl apply -f k8s/apps/auth-service/
+kubectl apply -f k8s/apps/customer-service/
+kubectl apply -f k8s/apps/product-service/
 kubectl apply -f k8s/apps/inventory-service/
 kubectl rollout status deployment/inventory-service -n ecommerce
 kubectl apply -f k8s/apps/payment-service/
 kubectl rollout status deployment/payment-service -n ecommerce
-```
-
-Check the rollout and workload:
-
-```powershell
-kubectl rollout status deployment/eureka-server -n ecommerce
-kubectl rollout status deployment/config-server -n ecommerce
-kubectl rollout status deployment/customer-service -n ecommerce
-kubectl rollout status deployment/auth-service -n ecommerce
-kubectl rollout status deployment/api-gateway -n ecommerce
-kubectl rollout status deployment/product-service -n ecommerce
+kubectl apply -f k8s/apps/order-service/
 kubectl rollout status deployment/order-service -n ecommerce
-kubectl rollout status deployment/inventory-service -n ecommerce
-kubectl rollout status deployment/payment-service -n ecommerce
-kubectl get pods,services,endpointslices -n ecommerce
+kubectl rollout status deployment/api-gateway -n ecommerce
+kubectl rollout status deployment/auth-service -n ecommerce
+kubectl rollout status deployment/customer-service -n ecommerce
+kubectl rollout status deployment/product-service -n ecommerce
 ```
 
-Find the automatically assigned Gateway NodePort:
-
-```powershell
-kubectl get service api-gateway -n ecommerce `
-  -o jsonpath='{.spec.ports[0].nodePort}'
-```
+Next install Prometheus and Grafana using the monitoring section, install the
+pinned Traefik Helm release, and apply `k8s/infra/ingress/ingress.yaml`.
+Complete the process with health, register/login/profile, Product, three Saga,
+outbox, idempotency, Kafka lag, monitoring, Ingress, and NodePort fallback
+acceptance checks.
 
 ## Test
 
@@ -210,13 +268,13 @@ curl.exe http://localhost:8888/api-gateway/default
 
 ## Core service smoke test
 
-Docker Desktop publishes the Gateway NodePort on localhost. Set the port and use
-a unique test email:
+Use `http://ecommerce.local` after adding the optional hosts entry described in
+Current architecture. Without that entry, run equivalent requests with
+`curl.exe --resolve`. NodePort `32323` remains the fallback. Use a unique test
+email:
 
 ```powershell
-$gatewayNodePort = kubectl get service api-gateway -n ecommerce `
-  -o jsonpath='{.spec.ports[0].nodePort}'
-$gatewayBaseUrl = "http://localhost:$gatewayNodePort"
+$gatewayBaseUrl = "http://ecommerce.local"
 $testEmail = "k8s-smoke-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())@example.test"
 $testPassword = "ReplaceForLocalSmokeTest123!"
 
@@ -252,14 +310,14 @@ The customer profile endpoint must return `401` without a token. Requests to
 `/internal/**` through the Gateway must not expose Customer Service internal
 endpoints.
 
-Product Service uses the same Gateway NodePort. With a valid USER token, verify
+Product Service uses the same Ingress endpoint. With a valid USER token, verify
 the product list and get endpoints. With a SELLER or ADMIN token, create and
 patch a uniquely named product. Verify that a USER receives `403` for writes,
 an unauthenticated write receives `401`, an unknown product returns `404`, and
 a duplicate product name returns `409`. Do not print JWT values in smoke-test
 output.
 
-For the Saga smoke test, use the Gateway NodePort and a valid USER token to
+For the Saga smoke test, use the Ingress endpoint and a valid USER token to
 create orders against products with prepared inventory. Verify successful,
 insufficient-stock, and simulated-payment-failure flows. Check final order
 status, inventory reservation or compensation, payment state, processed-event
@@ -301,64 +359,54 @@ kubectl delete pod -n ecommerce `
 kubectl rollout status deployment/payment-service -n ecommerce
 ```
 
-## Cleanup
+## Safe component removal
 
-Remove the pilot workloads:
+Routine cleanup must not delete the `ecommerce` namespace, StatefulSet PVCs,
+monitoring PVCs, Compose volumes, or external backups. Namespace deletion
+removes every namespaced resource. The default Docker Desktop `hostpath`
+StorageClass uses reclaim policy `Delete`, so PVC deletion can also permanently
+delete its PV data.
 
-```powershell
-kubectl delete -f k8s/apps/eureka-server/
-kubectl delete -f k8s/apps/config-server/
-kubectl delete -f k8s/apps/api-gateway/
-kubectl delete -f k8s/apps/auth-service/
-kubectl delete -f k8s/apps/customer-service/
-kubectl delete -f k8s/apps/product-service/
-kubectl delete -f k8s/apps/payment-service/
-kubectl delete -f k8s/apps/inventory-service/
-kubectl delete -f k8s/apps/order-service/
-kubectl delete secret ecommerce-secrets -n ecommerce
-```
-
-To roll back only the Saga services, delete them in reverse order and then
-restart their Compose instances:
+Remove only the application Ingress when routing must be disabled:
 
 ```powershell
-kubectl delete -f k8s/apps/payment-service/
-kubectl delete -f k8s/apps/inventory-service/
-kubectl delete -f k8s/apps/order-service/
-docker compose up -d order-service inventory-service payment-service
+kubectl delete -f k8s/infra/ingress/ingress.yaml
 ```
 
-Remove the complete local namespace and everything in it:
+The Gateway remains available through NodePort `32323`. If no other Ingress
+uses Traefik, remove its Helm release separately:
 
 ```powershell
-kubectl delete -f k8s/base/namespace.yaml
+kubectl get ingress -A
+helm uninstall traefik -n traefik
+kubectl get all -n traefik
 ```
+
+Scale stateless applications to zero when they must be stopped without
+removing configuration or data:
+
+```powershell
+kubectl scale deployment/api-gateway deployment/auth-service `
+  deployment/customer-service deployment/product-service `
+  deployment/order-service deployment/inventory-service `
+  deployment/payment-service -n ecommerce --replicas=0
+```
+
+StatefulSet, PVC, PV, Secret, or namespace removal requires separate explicit
+data-loss approval and verified off-cluster backups. Docker Desktop Kubernetes
+reset/delete can destroy all local `hostpath` data and must not be used as
+routine cleanup. Keep stopped Compose database/Kafka containers and their
+volumes until the rollback window has been explicitly closed.
 
 ## Local environment notes
 
-- Eureka is internal-only and uses a `ClusterIP` Service.
-- No persistent volume, ConfigMap, Secret, NodePort, or Ingress is required for
-  this pilot.
-- Probe timings allow for Java startup and should be tuned using observed
-  startup behavior.
-- CPU and memory requests/limits are initial local-development values. They
-  must be reviewed using runtime metrics before broader service migration.
-- No fixed JVM heap setting is applied.
-- PostgreSQL temporarily remains in Docker Compose and is not deployed to
-  Kubernetes.
-- Customer Service reaches the Compose PostgreSQL port through
-  `host.docker.internal`; this is a Docker Desktop-specific local dependency.
-- MongoDB temporarily remains in Docker Compose and is not deployed to
-  Kubernetes.
-- Product Service reaches MongoDB through
-  `mongodb://host.docker.internal:27017/product_db`; this is a Docker
-  Desktop-specific local dependency.
-- PostgreSQL and Kafka remain in Docker Compose for the Saga services.
-- Kafka keeps `localhost:9092` for host clients and advertises the separate
-  `host.docker.internal:29093` listener to Kubernetes pods.
-- Never run Compose and Kubernetes instances of Order, Inventory, or Payment
-  together without an intentional consumer-group migration; doing so causes
-  rebalances and makes test-event ownership nondeterministic.
+- Eureka and Config Server are internal-only `ClusterIP` Services.
+- PostgreSQL, MongoDB, and Kafka are internal-only Kubernetes Services backed
+  by StatefulSets and PVCs.
+- API traffic enters through Traefik; Gateway NodePort `32323` remains a local
+  fallback.
+- Probe and resource values are local-development starting points and should
+  be tuned from observed runtime data.
 - Real JWT secrets, internal API keys, and database credentials must never be
   written to repository files, command output, logs, or test reports.
 
@@ -427,6 +475,7 @@ Docker Desktop publishes the assigned Grafana NodePort on localhost. A
 port-forward can be used instead:
 
 ```powershell
+curl.exe http://localhost:30305/api/health
 kubectl port-forward -n ecommerce service/grafana 3000:3000
 curl.exe http://localhost:3000/api/health
 ```
@@ -436,6 +485,7 @@ In Grafana, confirm that the provisioned `Prometheus` datasource uses UID
 dashboard is loaded. Its existing queries, including
 `ecommerce_orders_total` and
 `ecommerce_inventory_reservations_total`, must remain unchanged.
+The final local acceptance baseline is 10/10 Prometheus targets `UP`.
 
 The Prometheus configuration uses Kubernetes Service DNS names and
 `/actuator/prometheus` for Eureka, Config Server, Gateway, Auth, Customer,
@@ -460,26 +510,17 @@ kubectl get pvc -n ecommerce prometheus-data grafana-data
 The CPU and memory requests/limits in these manifests are local-development
 starting values and must be tuned from observed usage.
 
-Roll back Kubernetes monitoring without deleting its data:
+Stop Kubernetes monitoring without deleting its configuration or data:
 
 ```powershell
-kubectl delete -f k8s/monitoring/grafana/deployment.yaml
-kubectl delete -f k8s/monitoring/grafana/service.yaml
-kubectl delete -f k8s/monitoring/grafana/configmap.yaml
-kubectl delete secret grafana-admin -n ecommerce
-kubectl delete -f k8s/monitoring/prometheus/deployment.yaml
-kubectl delete -f k8s/monitoring/prometheus/service.yaml
-kubectl delete -f k8s/monitoring/prometheus/configmap.yaml
-docker compose up -d prometheus grafana
+kubectl scale deployment/grafana -n ecommerce --replicas=0
+kubectl scale deployment/prometheus -n ecommerce --replicas=0
+kubectl get pvc -n ecommerce prometheus-data grafana-data
 ```
 
-PVC cleanup is intentionally separate because it permanently removes local
-monitoring history and Grafana state:
-
-```powershell
-kubectl delete -f k8s/monitoring/grafana/pvc.yaml
-kubectl delete -f k8s/monitoring/prometheus/pvc.yaml
-```
+PVC cleanup is intentionally omitted because it permanently removes local
+monitoring history and Grafana state. Delete `grafana-data` or
+`prometheus-data` only with explicit data-loss approval.
 
 ## Storage and database backup preparation
 
@@ -491,6 +532,19 @@ checksum. Back up `product_db` with `mongodump`, verify its BSON and metadata
 files, and checksum every backup file. Test restores only in temporary
 databases, compare schemas, indexes, constraints, and exact record counts, then
 remove the temporary databases. Never restore over the active databases.
+
+Persistent capacities in the final local architecture are:
+
+| Component | PVC capacity |
+| --- | ---: |
+| PostgreSQL | 5Gi |
+| MongoDB | 2Gi |
+| Kafka | 5Gi |
+| Prometheus | 2Gi |
+| Grafana | 1Gi |
+
+No manifest fixes `storageClassName` or uses a direct `hostPath`; dynamic
+claims use the cluster's default Docker Desktop `hostpath` StorageClass.
 
 The disposable storage manifests use the default StorageClass without fixing
 `storageClassName`:
@@ -531,18 +585,19 @@ external backups.
 
 Before a database migration, use this rollback sequence:
 
-1. Stop application write traffic.
-2. Stop Kafka producers and consumers in a controlled order.
-3. Take final PostgreSQL and MongoDB backups.
-4. Record source schema and record counts.
-5. Start the Kubernetes database resources.
-6. Restore the verified backups.
-7. Compare schemas, constraints, indexes, and record counts.
-8. Change application database endpoints.
-9. Run smoke and Saga tests.
-10. On failure, stop the Kubernetes application pods.
-11. Restore the Compose database endpoints.
-12. Verify data consistency again before resuming traffic.
+1. Scale Order, Inventory, Payment, Customer, and Product to zero.
+2. Stop all new writes to the Kubernetes databases and Kafka.
+3. Start the retained Compose PostgreSQL, MongoDB, and Kafka containers.
+4. Restore the five Deployment database endpoints to
+   `host.docker.internal` and the three Kafka bootstrap overrides to
+   `host.docker.internal:29093`.
+5. Apply the rollback Deployment manifests.
+6. Start Customer and Product, then Inventory and Payment consumers, and start
+   Order last.
+7. Run health, register/login/profile, Product, and all three Saga tests.
+8. Verify outbox publication, compensation, idempotency, and Kafka lag.
+9. Preserve Kubernetes PVCs, Compose named volumes, and every backup set until
+   data consistency and the final operating location are confirmed.
 
 ## PostgreSQL and MongoDB migration
 
@@ -748,3 +803,21 @@ controller and may destroy local PVC data; reinstall from the pinned chart
 after a reset and do not reset without verified database and Kafka backups.
 This setup is unencrypted local HTTP only and is not a production ingress
 configuration.
+
+## Production limitations
+
+The current architecture is complete for local development, but production
+requires additional engineering:
+
+- The Kubernetes cluster has one node.
+- PostgreSQL and MongoDB each have one instance.
+- MongoDB authentication is not enabled.
+- Kafka has one broker and replication factor one.
+- Ingress uses local HTTP without TLS.
+- Persistent data uses Docker Desktop local `hostpath` storage.
+- There is no automated off-cluster backup schedule.
+- There are no NetworkPolicies.
+- Secret rotation and an external secret-management system are not configured.
+- Not every application image has been validated to run as non-root.
+- Prometheus uses Service ClusterIP targets and is not prepared to discover
+  every pod independently after scaling to multiple replicas.
