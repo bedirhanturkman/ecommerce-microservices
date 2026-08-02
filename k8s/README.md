@@ -69,6 +69,35 @@ Apply only these preparation resources, in order:
 2. `k8s/infra/postgres-patroni/rbac.yaml`
 3. `k8s/infra/postgres-patroni/service.yaml`
 
+### Patroni image and configuration
+
+The local Patroni image is based on the immutable PostgreSQL
+`17.10-bookworm` image digest and installs Patroni `4.1.4` with Kubernetes DCS
+support and Psycopg `3.3.4` in an isolated Python virtual environment. Build
+it in the Docker Desktop image store without pushing it to a registry:
+
+```powershell
+docker build -t ecommerce-postgres-patroni:17-patroni-4.1.4 `
+  k8s/infra/postgres-patroni
+```
+
+The configuration uses Kubernetes Endpoints DCS and asynchronous streaming
+replication. Pod-specific identity, IP addresses, and the superuser and
+replication credentials must be supplied by the future StatefulSet through
+Patroni environment variables sourced from pod fields and Secrets. The
+ConfigMap contains no credentials and has not been applied to the cluster.
+
+No Patroni StatefulSet, pod, or PVC exists yet. The current PostgreSQL
+StatefulSet and `postgres:5432` application endpoint remain unchanged. Do not
+reuse the same local image tag for a materially different rebuild; either
+remove and deliberately rebuild the local tag from the reviewed sources or
+use a new immutable revision tag. Production requires a trusted registry,
+immutable image digest, vulnerability scanning, REST API authentication/TLS,
+network isolation, and durable multi-node storage.
+
+Synchronous replication, WAL archiving, and a custom archive command remain
+disabled for this local asynchronous baseline.
+
 ## Prerequisites
 
 - Docker Desktop Kubernetes is enabled.
