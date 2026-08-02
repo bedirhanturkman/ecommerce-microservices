@@ -474,10 +474,17 @@ processing. Its HPA requires a healthy Metrics Server and an available
 
 The `autoscaling/v2` manifest is stored at
 `k8s/apps/product-service/hpa.yaml`. It keeps at least one replica, permits at
-most three replicas, and targets average CPU utilization of 65% relative to
-the Product Service container's CPU request. The three-replica ceiling is
-deliberately conservative because the single Docker Desktop node already has
-high memory utilization.
+most two replicas in the local environment, and targets average CPU
+utilization of 65% relative to the Product Service container's CPU request.
+The capacity limit is based on the controlled JWT read-only load test: HPA
+scaled from one to two successfully, the second pod became Ready, and the
+EndpointSlice grew from one to two endpoints. When HPA requested a third
+replica, that pod remained Pending with `Insufficient memory`, while node
+memory reached approximately 89–90%. After load stopped, the 300-second
+scale-down stabilization window was observed and HPA naturally returned to one
+replica. Therefore `maxReplicas` is limited to two for this local single-node
+environment. Higher replica counts require increasing Docker Desktop node
+memory capacity and repeating the load test.
 
 Scale-up has no stabilization delay and can add at most one pod per 60
 seconds. Scale-down considers the previous 300 seconds of recommendations and
@@ -519,7 +526,12 @@ active can cause a temporary replica change before HPA reconciles it again.
 
 The first controlled load test will use `GET /api/v1/products`. Do not use a
 write endpoint or a health endpoint for that test. Do not increase
-`maxReplicas` beyond three without first re-evaluating node memory headroom.
+`maxReplicas` beyond two in this local environment without first increasing
+Docker Desktop node memory capacity and re-evaluating node memory headroom.
+Before starting the load test, verify that `ecommerce.local` is included in
+`NO_PROXY`/`no_proxy`; otherwise the client may send requests to an unrelated
+proxy endpoint. The JWT and other sensitive test values must be supplied via
+environment variables and must never be printed to the terminal or logs.
 
 For rollback, stop load generation and wait for active requests to drain,
 verify the context and exact HPA target, then remove only the Product Service
