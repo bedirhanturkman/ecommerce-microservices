@@ -42,6 +42,33 @@ This is a local HTTP environment; TLS is not configured. The stopped Compose
 PostgreSQL, MongoDB, and Kafka containers and their volumes are retained only
 for rollback. Kubernetes applications do not use them during normal operation.
 
+## Patroni preparation
+
+The local capacity preflight passed with approximately `9845.6Mi` allocatable
+memory. Request-based memory headroom is approximately `21.4%` while the
+existing PostgreSQL and three future Patroni pods coexist during migration,
+and approximately `17.5%` if the Product Service HPA also starts its second
+pod. This approval is only for controlled local testing.
+
+This preparation adds only the namespace-scoped ServiceAccount, RBAC, and
+isolated `postgres-patroni-headless` and `postgres-patroni-primary` Services.
+It does not create Patroni pods or PVCs, and it does not change the existing
+PostgreSQL StatefulSet or `postgres` Service. Applications continue to use
+`postgres:5432`; that Service must remain unchanged until the cutover branch.
+
+Patroni will use the Kubernetes API with the recommended Endpoints DCS mode.
+The image/version branch must confirm Endpoints support and the configured
+role-label contract before creating the cluster. The primary Service follows
+the Patroni 4.x defaults `cluster-name=postgres-patroni` and `role=primary`;
+an older image must not be used unless it is explicitly configured to emit
+the same labels. ConfigMap and Lease permissions are intentionally omitted.
+
+Apply only these preparation resources, in order:
+
+1. `k8s/infra/postgres-patroni/serviceaccount.yaml`
+2. `k8s/infra/postgres-patroni/rbac.yaml`
+3. `k8s/infra/postgres-patroni/service.yaml`
+
 ## Prerequisites
 
 - Docker Desktop Kubernetes is enabled.
