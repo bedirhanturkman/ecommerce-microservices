@@ -465,6 +465,69 @@ remove the `kube-system` namespace or any application workload, PVC, Secret, or
 database resource. After removal, confirm that the Metrics APIService is absent
 and expect `kubectl top` and resource-metric HPA operation to be unavailable.
 
+### Product Service horizontal pod autoscaling
+
+Product Service is the first horizontal autoscaling target because its safe
+read path does not create business data or involve Kafka, Saga, or outbox
+processing. Its HPA requires a healthy Metrics Server and an available
+`v1beta1.metrics.k8s.io` APIService.
+
+The `autoscaling/v2` manifest is stored at
+`k8s/apps/product-service/hpa.yaml`. It keeps at least one replica, permits at
+most three replicas, and targets average CPU utilization of 65% relative to
+the Product Service container's CPU request. The three-replica ceiling is
+deliberately conservative because the single Docker Desktop node already has
+high memory utilization.
+
+Scale-up has no stabilization delay and can add at most one pod per 60
+seconds. Scale-down considers the previous 300 seconds of recommendations and
+can remove at most one pod per 120 seconds. Readiness continues to control when
+a new pod enters the Product Service endpoints.
+
+Validate and apply the HPA only after Metrics Server checks pass:
+
+```powershell
+kubectl get apiservice v1beta1.metrics.k8s.io
+kubectl top nodes
+kubectl top pods -n ecommerce
+kubectl apply --dry-run=client -f k8s/apps/product-service/hpa.yaml
+kubectl apply --dry-run=server -f k8s/apps/product-service/hpa.yaml
+kubectl apply -f k8s/apps/product-service/hpa.yaml
+```
+
+Monitor the HPA and its target:
+
+```powershell
+kubectl get hpa product-service -n ecommerce
+kubectl describe hpa product-service -n ecommerce
+kubectl get deployment product-service -n ecommerce
+kubectl get pods -n ecommerce
+kubectl top pods -n ecommerce
+```
+
+The HPA `TARGETS` column must contain a numeric current CPU value, such as
+`3%/65%`. An `<unknown>` value means the controller cannot obtain a usable
+resource metric. Stop before load testing and inspect HPA events for
+`FailedGetResourceMetric`, then verify Metrics Server, pod metrics, and the
+container CPU request.
+
+Do not run manual `kubectl scale` while the HPA is active. The HPA owns the
+target Deployment's desired replica count and can overwrite manual changes on
+its next reconciliation. The Deployment manifest intentionally retains
+`replicas: 1` as its non-HPA baseline; reapplying that field while the HPA is
+active can cause a temporary replica change before HPA reconciles it again.
+
+The first controlled load test will use `GET /api/v1/products`. Do not use a
+write endpoint or a health endpoint for that test. Do not increase
+`maxReplicas` beyond three without first re-evaluating node memory headroom.
+
+For rollback, stop load generation and wait for active requests to drain,
+verify the context and exact HPA target, then remove only the Product Service
+HPA resource. Reconcile the Product Service Deployment from its manifest to
+restore the one-replica baseline. Confirm Product Service readiness and GET
+behavior afterward. Metrics Server and all stateful, monitoring, Secret, and
+storage resources remain untouched.
+
 Prometheus and Grafana use the same pinned image versions as the Compose
 environment:
 
