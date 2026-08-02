@@ -412,6 +412,59 @@ volumes until the rollback window has been explicitly closed.
 
 ## Kubernetes monitoring
 
+### Metrics Server
+
+Metrics Server exposes recent pod and node CPU/memory resource usage through
+the Kubernetes Resource Metrics API. Kubernetes HPA uses this API for standard
+CPU- and memory-based scaling decisions. Prometheus is the long-term
+monitoring, querying, and dashboard data source; having Prometheus running does
+not make the Resource Metrics API available to HPA.
+
+This repository pins the official Metrics Server `v0.8.0` release manifest at
+`k8s/platform/metrics-server/components.yaml`. Its upstream source is:
+
+```text
+https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.0/components.yaml
+```
+
+Install it after the cluster and node are healthy and before installing any
+resource-metric HPA. Validate both client and server schemas first:
+
+```powershell
+kubectl config current-context
+kubectl get nodes
+kubectl apply --dry-run=client `
+  -f k8s/platform/metrics-server/components.yaml
+kubectl apply --dry-run=server `
+  -f k8s/platform/metrics-server/components.yaml
+kubectl apply -f k8s/platform/metrics-server/components.yaml
+```
+
+Verify the deployment, aggregated API, and resource metrics:
+
+```powershell
+kubectl get deployment metrics-server -n kube-system
+kubectl get pods -n kube-system -l k8s-app=metrics-server
+kubectl get apiservice v1beta1.metrics.k8s.io
+kubectl describe apiservice v1beta1.metrics.k8s.io
+kubectl top nodes
+kubectl top pods -n ecommerce
+```
+
+The normal kubelet certificate validation attempt fails on this Docker Desktop
+cluster because the kubelet serving certificate does not contain the node IP
+in its Subject Alternative Names. The checked-in local manifest therefore uses
+`--kubelet-insecure-tls`. This option disables verification of kubelet serving
+certificates. It is limited to this local Docker Desktop environment and is not
+appropriate for production clusters. Production clusters must use kubelet
+serving certificates signed by a trusted CA with the required node addresses.
+
+Rollback removes only the resources defined by the pinned Metrics Server
+manifest after their exact names and active context have been verified. Do not
+remove the `kube-system` namespace or any application workload, PVC, Secret, or
+database resource. After removal, confirm that the Metrics APIService is absent
+and expect `kubectl top` and resource-metric HPA operation to be unavailable.
+
 Prometheus and Grafana use the same pinned image versions as the Compose
 environment:
 
