@@ -1,0 +1,37 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: postgres-patroni
+  namespace: ecommerce
+  labels:
+    app.kubernetes.io/name: postgres-patroni
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: ecommerce
+rules:
+  # Patroni watches cluster members and patches only its pod role label.
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch, patch]
+  # Endpoints mode is the selected Kubernetes API DCS model. Patroni stores
+  # leader and cluster state in annotations and updates the leader atomically.
+  - apiGroups: [""]
+    resources: [endpoints]
+    verbs: [get, list, watch, create, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: postgres-patroni
+  namespace: ecommerce
+  labels:
+    app.kubernetes.io/name: postgres-patroni
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: ecommerce
+subjects:
+  - kind: ServiceAccount
+    name: postgres-patroni
+    namespace: ecommerce
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: postgres-patroni

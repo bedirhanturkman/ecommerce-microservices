@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-patroni-headless
+  namespace: ecommerce
+  labels:
+    app.kubernetes.io/name: postgres-patroni
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: ecommerce
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: postgres-patroni
+    app.kubernetes.io/component: database
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: postgresql
+    - name: patroni-rest
+      port: 8008
+      targetPort: patroni-rest
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-patroni-primary
+  namespace: ecommerce
+  labels:
+    app.kubernetes.io/name: postgres-patroni
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: ecommerce
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: postgres-patroni
+    app.kubernetes.io/component: database
+    cluster-name: postgres-patroni
+    role: primary
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: postgresql
