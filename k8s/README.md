@@ -98,6 +98,36 @@ network isolation, and durable multi-node storage.
 Synchronous replication, WAL archiving, and a custom archive command remain
 disabled for this local asynchronous baseline.
 
+### Isolated Patroni cluster
+
+The isolated `postgres-patroni` StatefulSet defines three members: one primary
+and two asynchronous replicas. Each member receives its own `5Gi` `hostpath`
+PVC. The existing PostgreSQL StatefulSet, its PVC, and the `postgres:5432`
+Service remain unchanged; applications are not connected to Patroni yet.
+
+Before bootstrap, verify that `ecommerce-secrets` contains these key names
+without printing their values: `patroni-superuser-username`,
+`patroni-superuser-password`, `patroni-replication-username`, and
+`patroni-replication-password`. Apply resources in this order:
+
+1. Verify the Secret key names.
+2. `k8s/infra/postgres-patroni/serviceaccount.yaml`
+3. `k8s/infra/postgres-patroni/rbac.yaml`
+4. `k8s/infra/postgres-patroni/service.yaml`
+5. `k8s/infra/postgres-patroni/configmap.yaml`
+6. `k8s/infra/postgres-patroni/statefulset.yaml`
+
+Rollback must not automatically delete the StatefulSet PVCs. This Docker
+Desktop environment has one node and local `hostpath` storage, so three
+members test Patroni behavior but do not provide physical node or storage HA.
+
+During bootstrap, the Docker Desktop `hostpath` mount root did not allow
+`initdb` to change its permissions. The PVC mount remains
+`/var/lib/postgresql/data`, while Patroni's PostgreSQL `data_dir` is
+`/var/lib/postgresql/data/pgdata`. PostgreSQL UID 999 can create and manage
+that child directory, allowing non-root bootstrap without a root or privileged
+init container.
+
 ## Prerequisites
 
 - Docker Desktop Kubernetes is enabled.

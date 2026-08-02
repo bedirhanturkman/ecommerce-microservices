@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-patroni
+  namespace: ecommerce
+  labels:
+    app.kubernetes.io/name: postgres-patroni
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: ecommerce
+    cluster-name: postgres-patroni
+spec:
+  serviceName: postgres-patroni-headless
+  replicas: 3
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-patroni
+      app.kubernetes.io/component: database
+      cluster-name: postgres-patroni
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-patroni
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: ecommerce
+        cluster-name: postgres-patroni
+    spec:
+      serviceAccountName: postgres-patroni
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: postgres-patroni
+          image: ecommerce-postgres-patroni:17-patroni-4.1.4
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+            - name: patroni-rest
+              containerPort: 8008
+              protocol: TCP
+          env:
+            - name: PATRONI_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: PATRONI_KUBERNETES_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: PATRONI_RESTAPI_CONNECT_ADDRESS
+              value: "$(PATRONI_KUBERNETES_POD_IP):8008"
+            - name: PATRONI_POSTGRESQL_CONNECT_ADDRESS
+              value: "$(PATRONI_KUBERNETES_POD_IP):5432"
+            - name: PATRONI_SUPERUSER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: ecommerce-secrets
+                  key: patroni-superuser-username
+            - name: PATRONI_SUPERUSER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ecommerce-secrets
+                  key: patroni-superuser-password
+            - name: PATRONI_REPLICATION_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: ecommerce-secrets
+                  key: patroni-replication-username
+            - name: PATRONI_REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ecommerce-secrets
+                  key: patroni-replication-password
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          startupProbe:
+            httpGet:
+              path: /readiness
+              port: patroni-rest
+              scheme: HTTP
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 90
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: patroni-rest
+              scheme: HTTP
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: patroni-rest
+              scheme: HTTP
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: patroni-config
+              mountPath: /etc/patroni/patroni.yml
+              subPath: patroni.yml
+              readOnly: true
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: patroni-config
+          configMap:
+            name: postgres-patroni-config
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+        labels:
+          app.kubernetes.io/name: postgres-patroni
+          app.kubernetes.io/component: database
+          app.kubernetes.io/part-of: ecommerce
+          cluster-name: postgres-patroni
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: hostpath
+        resources:
+          requests:
+            storage: 5Gi
