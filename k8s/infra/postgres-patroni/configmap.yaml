@@ -55,7 +55,7 @@ data:
 
     postgresql:
       listen: 0.0.0.0:5432
-      data_dir: /var/lib/postgresql/data
+      data_dir: /var/lib/postgresql/data/pgdata
       bin_dir: /usr/lib/postgresql/17/bin
       pgpass: /var/lib/postgresql/.pgpass
       use_unix_socket: true
