@@ -4,15 +4,19 @@
 
 Existing business data was not transferred. Fresh bootstrap completed successfully through `infra/postgres-patroni/bootstrap-job.yaml` and `infra/postgres-patroni/schema-configmap.yaml`, creating four empty business databases and their schemas with separate restricted Patroni application roles; all initial business row counts were zero. Existing application credentials were unchanged. The first Job attempt stopped safely before mutation because of an invalid ClusterIP/backend-IP comparison, then completed after the check and credential separation were corrected. See `infra/postgres-patroni/FRESH-BOOTSTRAP.md` for the runbook and verification details.
 
-Applications remain connected to the old PostgreSQL, which is retained with its Services and PVC for rollback. The Job no-ops on an exact expected schema, fails on partial state, never performs automatic DROP, and cutover belongs to a separate branch.
+At the fresh-bootstrap stage applications still used the old PostgreSQL. The Job no-ops on an exact expected schema, fails on partial state, and never performs automatic DROP. Cutover and legacy retirement were completed in later stages documented below.
 
 ## Patroni application cutover
 
-The controlled, reversible application cutover completed successfully and is documented in `infra/postgres-patroni/CUTOVER.md`. Four PostgreSQL-backed Deployments connect directly to the Patroni primary Service with separate restricted credentials. API and success/inventory-failure/payment-failure Saga checks passed, outbox and Kafka lag returned to zero, and replica visibility was verified. The old PostgreSQL Service and storage remain unchanged for rollback. Failover testing and old PostgreSQL removal are separate follow-up work.
+The controlled, reversible application cutover completed successfully and is documented in `infra/postgres-patroni/CUTOVER.md`. Four PostgreSQL-backed Deployments connect directly to the Patroni primary Service with separate restricted credentials. API and success/inventory-failure/payment-failure Saga checks passed, outbox and Kafka lag returned to zero, and replica visibility was verified. The old PostgreSQL remained available during this stage and was retired only after the later failover validation.
 
 ## Patroni switchover and failover validation
 
-Controlled switchover and active-primary pod failure tests completed successfully; timings, sequence acceptance criteria, application recovery, Saga results, and monitoring evidence are documented in `infra/postgres-patroni/FAILOVER-TEST.md`. Both transitions preserved business data, post-promotion inserts generated IDs greater than the previous table maxima without constraint conflicts, successful Sagas drained their outboxes and Kafka lag to zero, and no application restart was required. Sequence gaps were accepted and no `setval` or sequence reset was used. The old PostgreSQL and every PVC remain retained. This single-node Docker Desktop/hostpath result validates local leader-election behavior, not production physical high availability.
+Controlled switchover and active-primary pod failure tests completed successfully; timings, sequence acceptance criteria, application recovery, Saga results, and monitoring evidence are documented in `infra/postgres-patroni/FAILOVER-TEST.md`. Both transitions preserved business data, post-promotion inserts generated IDs greater than the previous table maxima without constraint conflicts, successful Sagas drained their outboxes and Kafka lag to zero, and no application restart was required. Sequence gaps were accepted and no `setval` or sequence reset was used. This single-node Docker Desktop/hostpath result validates local leader-election behavior, not production physical high availability.
+
+## Legacy PostgreSQL retirement
+
+The legacy `postgres` StatefulSet and its ClusterIP and headless Services were removed after a zero-replica observation and two successful API/Saga checks. Patroni is the only active Kubernetes PostgreSQL infrastructure. The legacy `postgres-data-postgres-0` PVC and old application Secret keys remain retained pending a separate final-cleanup decision. See `infra/postgres-patroni/LEGACY-POSTGRES-RETIREMENT.md` for gates, timings, rollback boundaries, and final evidence.
 
 This directory contains the complete local Kubernetes architecture for the
 Docker Desktop cluster.
@@ -21,13 +25,13 @@ Docker Desktop cluster.
 
 All application services run in the `ecommerce` namespace. Eureka Server,
 Config Server, API Gateway, Auth, Customer, Product, Order, Inventory, and
-Payment are stateless Deployments. PostgreSQL, MongoDB, and Kafka run as
-single-replica StatefulSets with persistent storage. Prometheus and Grafana
-also run in Kubernetes with dedicated PVCs.
+Payment are stateless Deployments. PostgreSQL runs as a three-member Patroni
+StatefulSet; MongoDB and Kafka use their own StatefulSets. Prometheus and
+Grafana also run in Kubernetes with dedicated PVCs.
 
 The active in-cluster endpoints are:
 
-- PostgreSQL: `postgres:5432`
+- PostgreSQL primary: `postgres-patroni-primary:5432`
 - MongoDB: `mongodb:27017`
 - Kafka: `kafka:9092`
 - Config Server: `config-server:8888`
@@ -269,14 +273,19 @@ kubectl apply -f k8s/apps/config-server/
 kubectl rollout status deployment/config-server -n ecommerce
 ```
 
-Apply PostgreSQL and MongoDB, then restore only verified external backups as
-described in the database migration section. Do not start database clients
-until exact counts, constraints, and indexes match:
+Apply Patroni and MongoDB. Patroni application databases and schemas are
+created by the reviewed fresh-bootstrap resources; the retired single-instance
+PostgreSQL manifests are no longer part of the installation flow:
 
 ```powershell
-kubectl apply -f k8s/infra/postgres/service.yaml
-kubectl apply -f k8s/infra/postgres/statefulset.yaml
-kubectl rollout status statefulset/postgres -n ecommerce
+kubectl apply -f k8s/infra/postgres-patroni/serviceaccount.yaml
+kubectl apply -f k8s/infra/postgres-patroni/rbac.yaml
+kubectl apply -f k8s/infra/postgres-patroni/service.yaml
+kubectl apply -f k8s/infra/postgres-patroni/configmap.yaml
+kubectl apply -f k8s/infra/postgres-patroni/statefulset.yaml
+kubectl rollout status statefulset/postgres-patroni -n ecommerce
+kubectl apply -f k8s/infra/postgres-patroni/schema-configmap.yaml
+kubectl apply -f k8s/infra/postgres-patroni/bootstrap-job.yaml
 kubectl apply -f k8s/infra/mongodb/service.yaml
 kubectl apply -f k8s/infra/mongodb/statefulset.yaml
 kubectl rollout status statefulset/mongodb -n ecommerce
@@ -829,9 +838,9 @@ Before a database migration, use this rollback sequence:
 
 ## PostgreSQL and MongoDB migration
 
-PostgreSQL and MongoDB run as single-replica StatefulSets for local
-development; this provides stable identity and persistent storage, not high
-availability. Both use the default StorageClass. Never delete their PVCs,
+Patroni PostgreSQL and MongoDB use StatefulSets for local development. The
+single-node environment provides stable identity and persistent storage, not
+physical high availability. Never delete their PVCs,
 Compose named volumes, or external backups as part of a rollout or rollback.
 Docker Desktop Kubernetes reset/delete can destroy local `hostpath` data.
 
@@ -850,21 +859,17 @@ kubectl scale deployment/customer-service deployment/product-service `
   -n ecommerce --replicas=0
 ```
 
-Take final external `pg_dump -Fc` and `mongodump` backups, record SHA-256
-checksums, and validate them before applying database resources:
+The following historical migration sequence now applies only to MongoDB; the
+legacy Kubernetes PostgreSQL manifests have been retired:
 
 ```powershell
-kubectl apply -f k8s/infra/postgres/service.yaml
-kubectl apply -f k8s/infra/postgres/statefulset.yaml
-kubectl rollout status statefulset/postgres -n ecommerce
 kubectl apply -f k8s/infra/mongodb/service.yaml
 kubectl apply -f k8s/infra/mongodb/statefulset.yaml
 kubectl rollout status statefulset/mongodb -n ecommerce
 ```
 
-Create the four empty PostgreSQL databases, copy only the verified final dumps
-temporarily to `postgres-0`, and restore each with
-`pg_restore --exit-on-error`. Copy the verified MongoDB dump temporarily to
+Patroni database creation is defined by the fresh-bootstrap runbook; do not
+recreate or restore through the retired `postgres-0` workflow. Copy a verified MongoDB dump temporarily to
 `mongodb-0` and restore `product_db` with `mongorestore`. Stop immediately on
 any restore error. Remove only the temporary in-pod dump copies afterward.
 Before starting applications, compare exact counts, table/collection lists,
