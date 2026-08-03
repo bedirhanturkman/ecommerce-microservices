@@ -16,7 +16,11 @@ Controlled switchover and active-primary pod failure tests completed successfull
 
 ## Legacy PostgreSQL retirement
 
-The legacy `postgres` StatefulSet and its ClusterIP and headless Services were removed after a zero-replica observation and two successful API/Saga checks. Patroni is the only active Kubernetes PostgreSQL infrastructure. The legacy `postgres-data-postgres-0` PVC and old application Secret keys remain retained pending a separate final-cleanup decision. See `infra/postgres-patroni/LEGACY-POSTGRES-RETIREMENT.md` for gates, timings, rollback boundaries, and final evidence.
+The legacy `postgres` StatefulSet and its ClusterIP and headless Services were removed after a zero-replica observation and two successful API/Saga checks. See `infra/postgres-patroni/LEGACY-POSTGRES-RETIREMENT.md` for gates, timings, and retirement evidence.
+
+## Legacy PostgreSQL final cleanup
+
+The unused legacy PVC and its Delete-policy PV were permanently removed, and the eight obsolete Kubernetes application database keys were removed from the live Secret and its example contract. Patroni is now the only active and persistent Kubernetes PostgreSQL infrastructure. Final API, Saga, replication, Kafka, outbox, and monitoring checks passed. See `infra/postgres-patroni/LEGACY-POSTGRES-CLEANUP.md` for the irreversible cleanup record. Docker Compose PostgreSQL remains a separate local-development path and was not changed.
 
 This directory contains the complete local Kubernetes architecture for the
 Docker Desktop cluster.
@@ -246,14 +250,18 @@ kubectl create secret generic ecommerce-secrets `
   --namespace ecommerce `
   --from-literal=JWT_SECRET="$env:JWT_SECRET" `
   --from-literal=INTERNAL_API_KEY="$env:INTERNAL_API_KEY" `
-  --from-literal=CUSTOMER_DB_USERNAME="$env:POSTGRES_USER" `
-  --from-literal=CUSTOMER_DB_PASSWORD="$env:POSTGRES_PASSWORD" `
-  --from-literal=ORDER_DB_USERNAME="$env:POSTGRES_USER" `
-  --from-literal=ORDER_DB_PASSWORD="$env:POSTGRES_PASSWORD" `
-  --from-literal=INVENTORY_DB_USERNAME="$env:POSTGRES_USER" `
-  --from-literal=INVENTORY_DB_PASSWORD="$env:POSTGRES_PASSWORD" `
-  --from-literal=PAYMENT_DB_USERNAME="$env:POSTGRES_USER" `
-  --from-literal=PAYMENT_DB_PASSWORD="$env:POSTGRES_PASSWORD"
+  --from-literal=patroni-superuser-username="$env:PATRONI_SUPERUSER_USERNAME" `
+  --from-literal=patroni-superuser-password="$env:PATRONI_SUPERUSER_PASSWORD" `
+  --from-literal=patroni-replication-username="$env:PATRONI_REPLICATION_USERNAME" `
+  --from-literal=patroni-replication-password="$env:PATRONI_REPLICATION_PASSWORD" `
+  --from-literal=patroni-customer-db-username="$env:PATRONI_CUSTOMER_DB_USERNAME" `
+  --from-literal=patroni-customer-db-password="$env:PATRONI_CUSTOMER_DB_PASSWORD" `
+  --from-literal=patroni-order-db-username="$env:PATRONI_ORDER_DB_USERNAME" `
+  --from-literal=patroni-order-db-password="$env:PATRONI_ORDER_DB_PASSWORD" `
+  --from-literal=patroni-inventory-db-username="$env:PATRONI_INVENTORY_DB_USERNAME" `
+  --from-literal=patroni-inventory-db-password="$env:PATRONI_INVENTORY_DB_PASSWORD" `
+  --from-literal=patroni-payment-db-username="$env:PATRONI_PAYMENT_DB_USERNAME" `
+  --from-literal=patroni-payment-db-password="$env:PATRONI_PAYMENT_DB_PASSWORD"
 ```
 
 `k8s/base/secret.example.yaml` documents the required keys only. It must not be
@@ -844,10 +852,11 @@ physical high availability. Never delete their PVCs,
 Compose named volumes, or external backups as part of a rollout or rollback.
 Docker Desktop Kubernetes reset/delete can destroy local `hostpath` data.
 
-PostgreSQL reuses the equal database username/password values already stored
-under `CUSTOMER_DB_USERNAME` and `CUSTOMER_DB_PASSWORD` in
-`ecommerce-secrets`. MongoDB retains the existing local no-auth model and is
-exposed only through ClusterIP Services. No real secret belongs in Git.
+Each PostgreSQL-backed Kubernetes service uses its own Patroni-specific
+username/password key pair in `ecommerce-secrets`; the obsolete shared legacy
+keys were removed during final cleanup. MongoDB retains the existing local
+no-auth model and is exposed only through ClusterIP Services. No real secret
+belongs in Git.
 
 Before cutover, record exact counts, confirm no active Saga or pending outbox
 work, then scale down in this order:
