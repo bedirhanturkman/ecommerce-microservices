@@ -34,17 +34,17 @@ spec:
             - name: EUREKA_INSTANCE_HOSTNAME
               value: payment-service
             - name: PAYMENT_DB_URL
-              value: jdbc:postgresql://postgres:5432/payment_db
+              value: jdbc:postgresql://postgres-patroni-primary:5432/payment_db
             - name: PAYMENT_DB_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: ecommerce-secrets
-                  key: PAYMENT_DB_USERNAME
+                  key: patroni-payment-db-username
             - name: PAYMENT_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: ecommerce-secrets
-                  key: PAYMENT_DB_PASSWORD
+                  key: patroni-payment-db-password
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: kafka:9092
           ports:

@@ -44,17 +44,17 @@ spec:
                   name: ecommerce-secrets
                   key: INTERNAL_API_KEY
             - name: CUSTOMER_DB_URL
-              value: jdbc:postgresql://postgres:5432/customer_db
+              value: jdbc:postgresql://postgres-patroni-primary:5432/customer_db
             - name: CUSTOMER_DB_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: ecommerce-secrets
-                  key: CUSTOMER_DB_USERNAME
+                  key: patroni-customer-db-username
             - name: CUSTOMER_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: ecommerce-secrets
-                  key: CUSTOMER_DB_PASSWORD
+                  key: patroni-customer-db-password
           ports:
             - name: http
               containerPort: 8081

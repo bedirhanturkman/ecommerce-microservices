@@ -39,17 +39,17 @@ spec:
                   name: ecommerce-secrets
                   key: JWT_SECRET
             - name: INVENTORY_DB_URL
-              value: jdbc:postgresql://postgres:5432/inventory_db
+              value: jdbc:postgresql://postgres-patroni-primary:5432/inventory_db
             - name: INVENTORY_DB_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: ecommerce-secrets
-                  key: INVENTORY_DB_USERNAME
+                  key: patroni-inventory-db-username
             - name: INVENTORY_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: ecommerce-secrets
-                  key: INVENTORY_DB_PASSWORD
+                  key: patroni-inventory-db-password
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: kafka:9092
           ports:
