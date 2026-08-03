@@ -6,6 +6,10 @@ Existing business data was not transferred. Fresh bootstrap completed successful
 
 Applications remain connected to the old PostgreSQL, which is retained with its Services and PVC for rollback. The Job no-ops on an exact expected schema, fails on partial state, never performs automatic DROP, and cutover belongs to a separate branch.
 
+## Patroni application cutover
+
+The controlled, reversible application cutover completed successfully and is documented in `infra/postgres-patroni/CUTOVER.md`. Four PostgreSQL-backed Deployments connect directly to the Patroni primary Service with separate restricted credentials. API and success/inventory-failure/payment-failure Saga checks passed, outbox and Kafka lag returned to zero, and replica visibility was verified. The old PostgreSQL Service and storage remain unchanged for rollback. Failover testing and old PostgreSQL removal are separate follow-up work.
+
 This directory contains the complete local Kubernetes architecture for the
 Docker Desktop cluster.
 

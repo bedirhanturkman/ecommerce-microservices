@@ -39,17 +39,17 @@ spec:
                   name: ecommerce-secrets
                   key: JWT_SECRET
             - name: ORDER_DB_URL
-              value: jdbc:postgresql://postgres:5432/order_db
+              value: jdbc:postgresql://postgres-patroni-primary:5432/order_db
             - name: ORDER_DB_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: ecommerce-secrets
-                  key: ORDER_DB_USERNAME
+                  key: patroni-order-db-username
             - name: ORDER_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: ecommerce-secrets
-                  key: ORDER_DB_PASSWORD
+                  key: patroni-order-db-password
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: kafka:9092
           ports:
