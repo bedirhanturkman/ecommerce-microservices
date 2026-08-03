@@ -10,6 +10,10 @@ Applications remain connected to the old PostgreSQL, which is retained with its 
 
 The controlled, reversible application cutover completed successfully and is documented in `infra/postgres-patroni/CUTOVER.md`. Four PostgreSQL-backed Deployments connect directly to the Patroni primary Service with separate restricted credentials. API and success/inventory-failure/payment-failure Saga checks passed, outbox and Kafka lag returned to zero, and replica visibility was verified. The old PostgreSQL Service and storage remain unchanged for rollback. Failover testing and old PostgreSQL removal are separate follow-up work.
 
+## Patroni switchover and failover validation
+
+Controlled switchover and active-primary pod failure tests completed successfully; timings, sequence acceptance criteria, application recovery, Saga results, and monitoring evidence are documented in `infra/postgres-patroni/FAILOVER-TEST.md`. Both transitions preserved business data, post-promotion inserts generated IDs greater than the previous table maxima without constraint conflicts, successful Sagas drained their outboxes and Kafka lag to zero, and no application restart was required. Sequence gaps were accepted and no `setval` or sequence reset was used. The old PostgreSQL and every PVC remain retained. This single-node Docker Desktop/hostpath result validates local leader-election behavior, not production physical high availability.
+
 This directory contains the complete local Kubernetes architecture for the
 Docker Desktop cluster.
 
