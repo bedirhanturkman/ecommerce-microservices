@@ -1,5 +1,11 @@
 # Local Kubernetes
 
+## Patroni fresh schema bootstrap
+
+Existing business data was not transferred. Fresh bootstrap completed successfully through `infra/postgres-patroni/bootstrap-job.yaml` and `infra/postgres-patroni/schema-configmap.yaml`, creating four empty business databases and their schemas with separate restricted Patroni application roles; all initial business row counts were zero. Existing application credentials were unchanged. The first Job attempt stopped safely before mutation because of an invalid ClusterIP/backend-IP comparison, then completed after the check and credential separation were corrected. See `infra/postgres-patroni/FRESH-BOOTSTRAP.md` for the runbook and verification details.
+
+Applications remain connected to the old PostgreSQL, which is retained with its Services and PVC for rollback. The Job no-ops on an exact expected schema, fails on partial state, never performs automatic DROP, and cutover belongs to a separate branch.
+
 This directory contains the complete local Kubernetes architecture for the
 Docker Desktop cluster.
 

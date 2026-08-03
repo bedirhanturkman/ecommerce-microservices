@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-patroni-fresh-bootstrap
+  namespace: ecommerce
+  labels:
+    app.kubernetes.io/name: postgres-patroni
+    app.kubernetes.io/component: schema-bootstrap
+    app.kubernetes.io/part-of: ecommerce-microservices
+data:
+  bootstrap.py: |-
+    import os
+    from pathlib import Path
+    import psycopg
+    from psycopg import sql
+
+    HOST, PORT, CLUSTER = "postgres-patroni-primary", 5432, "postgres-patroni"
+    SPECS = (
+        ("customer_db", "CUSTOMER_DB_USERNAME", "CUSTOMER_DB_PASSWORD", "customer-schema.sql", {"customer"}, {"customers_pkey", "customers_email_key"}, {"customers_id_seq"}),
+        ("inventory_db", "INVENTORY_DB_USERNAME", "INVENTORY_DB_PASSWORD", "inventory-schema.sql", {"inventories", "inventory_reservations", "processed_events", "inventory_outbox_events"}, {"inventories_pkey", "uk_inventories_product_id", "chk_inventories_quantity", "chk_inventories_reserved_quantity", "chk_inventories_reserved_not_greater", "inventory_reservations_pkey", "uk_inventory_reservation_order_product", "fk_inventory_reservation_inventory", "chk_inventory_reservation_quantity", "chk_inventory_reservation_status", "processed_events_pkey", "uk_processed_events_order_id", "inventory_outbox_events_pkey", "uk_inventory_outbox_aggregate_event", "chk_inventory_outbox_retry_count", "chk_inventory_outbox_status"}, {"inventories_id_seq", "inventory_reservations_id_seq", "processed_events_id_seq"}),
+        ("payment_db", "PAYMENT_DB_USERNAME", "PAYMENT_DB_PASSWORD", "payment-schema.sql", {"payments", "processed_payment_events", "payment_outbox_events"}, {"payments_pkey", "uk_payments_order_id", "chk_payments_amount", "chk_payments_status", "chk_payments_completion_fields", "processed_payment_events_pkey", "uk_processed_payment_events_order_id", "payment_outbox_events_pkey", "uk_payment_outbox_aggregate_event", "chk_payment_outbox_retry_count", "chk_payment_outbox_status"}, {"payments_id_seq", "processed_payment_events_id_seq"}),
+        ("order_db", "ORDER_DB_USERNAME", "ORDER_DB_PASSWORD", "order-schema.sql", {"orders", "order_items", "order_outbox_events"}, {"orders_pkey", "order_items_pkey", "fk_order_items_order", "order_outbox_events_pkey", "uk_order_outbox_aggregate_event", "chk_order_outbox_retry_count", "chk_order_outbox_status"}, {"orders_id_seq", "order_items_id_seq"}),
+    )
+    REQUIRED = ["PATRONI_SUPERUSER_USERNAME", "PATRONI_SUPERUSER_PASSWORD"] + [x for s in SPECS for x in s[1:3]]
+    missing = [x for x in REQUIRED if not os.environ.get(x)]
+    if missing:
+        raise RuntimeError("Missing SecretKeyRef variables: " + ", ".join(missing))
+    ADMIN_USER, ADMIN_PASSWORD = os.environ["PATRONI_SUPERUSER_USERNAME"], os.environ["PATRONI_SUPERUSER_PASSWORD"]
+
+    def connect(db, user, password, autocommit=False):
+        return psycopg.connect(host=HOST, port=PORT, dbname=db, user=user, password=password, connect_timeout=10, autocommit=autocommit)
+
+    def names(conn, query):
+        return {r[0] for r in conn.execute(query)}
+
+    def state(db, tables, constraints, sequences, owner):
+        with connect(db, ADMIN_USER, ADMIN_PASSWORD) as conn:
+            actual_tables = names(conn, "SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            if not actual_tables:
+                return "empty"
+            actual_constraints = names(conn, "SELECT conname FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace WHERE n.nspname='public'")
+            actual_sequences = names(conn, "SELECT sequencename FROM pg_sequences WHERE schemaname='public'")
+            owners = names(conn, "SELECT tableowner FROM pg_tables WHERE schemaname='public'")
+            if actual_tables == tables and constraints <= actual_constraints and sequences <= actual_sequences and owners == {owner}:
+                return "complete"
+            raise RuntimeError(f"{db}: partial or unexpected schema; refusing automatic changes")
+
+    credentials = {}
+    for _, ue, pe, *_ in SPECS:
+        user, password = os.environ[ue], os.environ[pe]
+        if user in credentials and credentials[user] != password:
+            raise RuntimeError("Credential validation failed")
+        credentials[user] = password
+
+    with connect("postgres", ADMIN_USER, ADMIN_PASSWORD, autocommit=True) as admin:
+        recovery, read_only, cluster, version, collate, ctype = admin.execute("SELECT pg_is_in_recovery(), current_setting('transaction_read_only'), current_setting('cluster_name'), current_setting('server_version'), datcollate, datctype FROM pg_database WHERE datname=current_database()").fetchone()
+        if recovery or read_only != "off" or cluster != CLUSTER or not version.startswith("17."):
+            raise RuntimeError("Target is not the expected writable PostgreSQL 17 Patroni primary")
+        print(f"Target verified: {HOST}:{PORT}, cluster={cluster}, PostgreSQL={version}, writable=true")
+        states = {}
+        for db, ue, _, _, tables, constraints, sequences in SPECS:
+            user = os.environ[ue]
+            row = admin.execute("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=%s", (db,)).fetchone()
+            if row and row[0] != user:
+                raise RuntimeError(f"{db}: unexpected database owner")
+            states[db] = state(db, tables, constraints, sequences, user) if row else "absent"
+        for user, password in credentials.items():
+            role = admin.execute("SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls FROM pg_roles WHERE rolname=%s", (user,)).fetchone()
+            if role is None:
+                admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS").format(sql.Identifier(user), sql.Literal(password)))
+                print("Created restricted application role")
+            elif role != (True, False, False, False, False, False):
+                raise RuntimeError("Application role is not restricted")
+        for db, ue, *_ in SPECS:
+            if states[db] == "absent":
+                user = os.environ[ue]
+                admin.execute(sql.SQL("CREATE DATABASE {} OWNER {} TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE {} LC_CTYPE {}").format(sql.Identifier(db), sql.Identifier(user), sql.Literal(collate), sql.Literal(ctype)))
+                print(f"Created empty UTF8 database: {db}")
+
+    for db, ue, pe, filename, tables, constraints, sequences in SPECS:
+        user, password = os.environ[ue], os.environ[pe]
+        if states[db] == "complete":
+            print(f"No-op: {db} already has the expected complete schema")
+            continue
+        with connect(db, user, password) as conn:
+            conn.execute(Path("/bootstrap", filename).read_text(encoding="utf-8"))
+        if state(db, tables, constraints, sequences, user) != "complete":
+            raise RuntimeError(f"{db}: post-apply verification failed")
+        print(f"Applied schema transactionally: {db}")
+    print("Fresh Patroni schema bootstrap completed successfully")
+  customer-schema.sql: |-
+    CREATE SEQUENCE IF NOT EXISTS public.customers_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 NO MAXVALUE CACHE 1;
+    CREATE TABLE IF NOT EXISTS public.customer (
+      id BIGINT NOT NULL DEFAULT nextval('public.customers_id_seq'::regclass), first_name VARCHAR(255) NOT NULL,
+      last_name VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL, password VARCHAR(255) NOT NULL,
+      role VARCHAR(50) NOT NULL DEFAULT 'USER', CONSTRAINT customers_pkey PRIMARY KEY (id),
+      CONSTRAINT customers_email_key UNIQUE (email));
+    ALTER SEQUENCE public.customers_id_seq OWNED BY public.customer.id;
+  order-schema.sql: |-
+    CREATE TABLE IF NOT EXISTS public.orders (
+      id BIGSERIAL NOT NULL, customer_id BIGINT NOT NULL, total_price NUMERIC(10,2) NOT NULL, status VARCHAR(50) NOT NULL,
+      created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, version BIGINT NOT NULL DEFAULT 0,
+      CONSTRAINT orders_pkey PRIMARY KEY (id), CONSTRAINT chk_orders_status CHECK (status IN ('CREATED','PAID','PAYMENT_FAILED','INVENTORY_FAILED')));
+    CREATE TABLE IF NOT EXISTS public.order_items (
+      id BIGSERIAL NOT NULL, order_id BIGINT NOT NULL, product_id VARCHAR(255) NOT NULL, product_name VARCHAR(255) NOT NULL,
+      quantity INTEGER NOT NULL, unit_price NUMERIC(10,2) NOT NULL, total_price NUMERIC(10,2) NOT NULL,
+      CONSTRAINT order_items_pkey PRIMARY KEY (id), CONSTRAINT fk_order_items_order FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE);
+    CREATE TABLE IF NOT EXISTS public.order_outbox_events (
+      id UUID NOT NULL, aggregate_type VARCHAR(100) NOT NULL, aggregate_id VARCHAR(100) NOT NULL, event_type VARCHAR(150) NOT NULL,
+      topic VARCHAR(150) NOT NULL, message_key VARCHAR(150) NOT NULL, payload TEXT NOT NULL, status VARCHAR(20) NOT NULL,
+      retry_count INTEGER NOT NULL DEFAULT 0, next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, published_at TIMESTAMPTZ, last_error VARCHAR(1000), version BIGINT NOT NULL DEFAULT 0,
+      CONSTRAINT order_outbox_events_pkey PRIMARY KEY (id), CONSTRAINT uk_order_outbox_aggregate_event UNIQUE (aggregate_type,aggregate_id,event_type),
+      CONSTRAINT chk_order_outbox_retry_count CHECK (retry_count >= 0), CONSTRAINT chk_order_outbox_status CHECK (status IN ('PENDING','PUBLISHED')));
+    CREATE INDEX IF NOT EXISTS idx_order_outbox_pending ON public.order_outbox_events(status,next_attempt_at,created_at);
+  inventory-schema.sql: |-
+    CREATE TABLE IF NOT EXISTS public.inventories (
+      id BIGINT GENERATED BY DEFAULT AS IDENTITY, product_id VARCHAR(255) NOT NULL, quantity INTEGER NOT NULL, reserved_quantity INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL, version BIGINT NOT NULL DEFAULT 0,
+      CONSTRAINT inventories_pkey PRIMARY KEY(id), CONSTRAINT uk_inventories_product_id UNIQUE(product_id),
+      CONSTRAINT chk_inventories_quantity CHECK(quantity >= 0), CONSTRAINT chk_inventories_reserved_quantity CHECK(reserved_quantity >= 0),
+      CONSTRAINT chk_inventories_reserved_not_greater CHECK(reserved_quantity <= quantity));
+    CREATE TABLE IF NOT EXISTS public.inventory_reservations (
+      id BIGINT GENERATED BY DEFAULT AS IDENTITY, order_id BIGINT NOT NULL, product_id VARCHAR(255) NOT NULL, quantity INTEGER NOT NULL,
+      status VARCHAR(30) NOT NULL, reserved_at TIMESTAMPTZ NOT NULL, confirmed_at TIMESTAMPTZ, released_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL, version BIGINT NOT NULL DEFAULT 0,
+      CONSTRAINT inventory_reservations_pkey PRIMARY KEY(id), CONSTRAINT uk_inventory_reservation_order_product UNIQUE(order_id,product_id),
+      CONSTRAINT fk_inventory_reservation_inventory FOREIGN KEY(product_id) REFERENCES public.inventories(product_id),
+      CONSTRAINT chk_inventory_reservation_quantity CHECK(quantity > 0), CONSTRAINT chk_inventory_reservation_status CHECK(status IN ('RESERVED','CONFIRMED','RELEASED')));
+    CREATE INDEX IF NOT EXISTS idx_inventory_reservations_order_status ON public.inventory_reservations(order_id,status);
+    CREATE TABLE IF NOT EXISTS public.processed_events (
+      id BIGINT GENERATED BY DEFAULT AS IDENTITY, order_id BIGINT NOT NULL, processed_at TIMESTAMPTZ NOT NULL,
+      CONSTRAINT processed_events_pkey PRIMARY KEY(id), CONSTRAINT uk_processed_events_order_id UNIQUE(order_id));
+    CREATE TABLE IF NOT EXISTS public.inventory_outbox_events (
+      id UUID NOT NULL, aggregate_type VARCHAR(100) NOT NULL, aggregate_id VARCHAR(100) NOT NULL, event_type VARCHAR(150) NOT NULL,
+      topic VARCHAR(150) NOT NULL, message_key VARCHAR(150) NOT NULL, payload TEXT NOT NULL, status VARCHAR(20) NOT NULL,
+      retry_count INTEGER NOT NULL DEFAULT 0, next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, published_at TIMESTAMPTZ, last_error VARCHAR(1000), version BIGINT NOT NULL DEFAULT 0,
+      CONSTRAINT inventory_outbox_events_pkey PRIMARY KEY(id), CONSTRAINT uk_inventory_outbox_aggregate_event UNIQUE(aggregate_type,aggregate_id,event_type),
+      CONSTRAINT chk_inventory_outbox_retry_count CHECK(retry_count >= 0), CONSTRAINT chk_inventory_outbox_status CHECK(status IN ('PENDING','PUBLISHED')));
+    CREATE INDEX IF NOT EXISTS idx_inventory_outbox_pending ON public.inventory_outbox_events(status,next_attempt_at,created_at);
+  payment-schema.sql: |-
+    CREATE TABLE IF NOT EXISTS public.payments (
+      id BIGINT GENERATED BY DEFAULT AS IDENTITY, order_id BIGINT NOT NULL, customer_id BIGINT NOT NULL, amount NUMERIC(19,2) NOT NULL,
+      status VARCHAR(30) NOT NULL, failure_reason VARCHAR(500), failure_code VARCHAR(50), created_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL, completed_at TIMESTAMPTZ, version BIGINT NOT NULL DEFAULT 0,
+      CONSTRAINT payments_pkey PRIMARY KEY(id), CONSTRAINT uk_payments_order_id UNIQUE(order_id), CONSTRAINT chk_payments_amount CHECK(amount > 0),
+      CONSTRAINT chk_payments_status CHECK(status IN ('PENDING','SUCCEEDED','FAILED')),
+      CONSTRAINT chk_payments_completion_fields CHECK((status='PENDING' AND failure_code IS NULL AND failure_reason IS NULL AND completed_at IS NULL) OR (status='SUCCEEDED' AND failure_code IS NULL AND failure_reason IS NULL AND completed_at IS NOT NULL) OR (status='FAILED' AND failure_code IS NOT NULL AND failure_reason IS NOT NULL AND completed_at IS NOT NULL)));
+    CREATE TABLE IF NOT EXISTS public.processed_payment_events (
+      id BIGINT GENERATED BY DEFAULT AS IDENTITY, order_id BIGINT NOT NULL, processed_at TIMESTAMPTZ NOT NULL,
+      CONSTRAINT processed_payment_events_pkey PRIMARY KEY(id), CONSTRAINT uk_processed_payment_events_order_id UNIQUE(order_id));
+    CREATE TABLE IF NOT EXISTS public.payment_outbox_events (
+      id UUID NOT NULL, aggregate_type VARCHAR(100) NOT NULL, aggregate_id VARCHAR(100) NOT NULL, event_type VARCHAR(150) NOT NULL,
+      topic VARCHAR(150) NOT NULL, message_key VARCHAR(150) NOT NULL, payload TEXT NOT NULL, status VARCHAR(20) NOT NULL,
+      retry_count INTEGER NOT NULL DEFAULT 0, next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, published_at TIMESTAMPTZ, last_error VARCHAR(1000), version BIGINT NOT NULL DEFAULT 0,
+      CONSTRAINT payment_outbox_events_pkey PRIMARY KEY(id), CONSTRAINT uk_payment_outbox_aggregate_event UNIQUE(aggregate_type,aggregate_id,event_type),
+      CONSTRAINT chk_payment_outbox_retry_count CHECK(retry_count >= 0), CONSTRAINT chk_payment_outbox_status CHECK(status IN ('PENDING','PUBLISHED')));
+    CREATE INDEX IF NOT EXISTS idx_payment_outbox_pending ON public.payment_outbox_events(status,next_attempt_at,created_at);
