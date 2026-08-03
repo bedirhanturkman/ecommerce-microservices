@@ -32,7 +32,7 @@ After the successful observation, only these live resources were deleted:
 
 Their active Kubernetes manifests were removed from the repository so a normal installation cannot recreate the legacy database accidentally. Docker Compose PostgreSQL remains unchanged for local Compose development.
 
-The `postgres-data-postgres-0` PVC and its bound PV were deliberately retained. All legacy application Secret keys were also retained without modification. The PVC and old credential contract require a separate, explicit security and data-retention decision before final deletion; this runbook contains no PVC deletion command.
+The `postgres-data-postgres-0` PVC and its bound PV were deliberately retained during retirement, and all legacy application Secret keys remained unchanged at that stage. The later, explicitly authorized irreversible cleanup removed that PVC/PV and the obsolete keys; see `LEGACY-POSTGRES-CLEANUP.md` for the final record.
 
 ## Final validation
 
