@@ -18,12 +18,6 @@ data:
           - targets:
               - prometheus:9090
 
-      - job_name: eureka-server
-        metrics_path: /actuator/prometheus
-        static_configs:
-          - targets:
-              - eureka-server:8761
-
       - job_name: config-server
         metrics_path: /actuator/prometheus
         static_configs:

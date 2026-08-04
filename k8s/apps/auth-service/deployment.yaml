@@ -22,17 +22,13 @@ spec:
     spec:
       containers:
         - name: auth-service
-          image: ecommerce/auth-service:k8s-26faf35
+          image: ecommerce/auth-service:k8s-dns
           imagePullPolicy: IfNotPresent
           env:
             - name: SPRING_CONFIG_IMPORT
               value: configserver:http://config-server:8888
             - name: CONFIG_SERVER_URL
               value: http://config-server:8888
-            - name: EUREKA_DEFAULT_ZONE
-              value: http://eureka-server:8761/eureka/
-            - name: EUREKA_INSTANCE_HOSTNAME
-              value: auth-service
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
