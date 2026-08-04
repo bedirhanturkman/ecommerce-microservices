@@ -27,10 +27,14 @@ spec:
           env:
             - name: CONFIG_REPO_LOCATION
               value: file:/configrepo
-            - name: EUREKA_DEFAULT_ZONE
-              value: http://eureka-server:8761/eureka/
-            - name: EUREKA_INSTANCE_HOSTNAME
-              value: config-server
+            - name: EUREKA_CLIENT_ENABLED
+              value: "false"
+            - name: EUREKA_CLIENT_REGISTER_WITH_EUREKA
+              value: "false"
+            - name: EUREKA_CLIENT_FETCH_REGISTRY
+              value: "false"
+            - name: SPRING_CLOUD_DISCOVERY_ENABLED
+              value: "false"
           ports:
             - name: http
               containerPort: 8888

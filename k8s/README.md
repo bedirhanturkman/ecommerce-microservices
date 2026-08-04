@@ -27,9 +27,9 @@ Docker Desktop cluster.
 
 ## Current architecture
 
-All application services run in the `ecommerce` namespace. Eureka Server,
-Config Server, API Gateway, Auth, Customer, Product, Order, Inventory, and
-Payment are stateless Deployments. PostgreSQL runs as a three-member Patroni
+All application services run in the `ecommerce` namespace. Config Server, API
+Gateway, Auth, Customer, Product, Order, Inventory, and Payment are stateless
+Deployments. PostgreSQL runs as a three-member Patroni
 StatefulSet; MongoDB and Kafka use their own StatefulSets. Prometheus and
 Grafana also run in Kubernetes with dedicated PVCs.
 
@@ -39,7 +39,13 @@ The active in-cluster endpoints are:
 - MongoDB: `mongodb:27017`
 - Kafka: `kafka:9092`
 - Config Server: `config-server:8888`
-- Eureka Server: `eureka-server:8761`
+
+Kubernetes does not run Eureka or use Spring Cloud Kubernetes Discovery.
+Gateway and synchronous application clients use the short, namespace-local
+Kubernetes Service DNS names and explicit application ports. Kubernetes
+Services distribute traffic only to ready endpoints. Docker Compose remains a
+separate environment in which Eureka and the existing `lb://` routes stay
+active.
 
 Local external access is:
 
@@ -168,12 +174,6 @@ kubectl get storageclass
 
 ## Build the image
 
-Build Eureka Server with the fixed tag used by its Deployment:
-
-```powershell
-docker build -t ecommerce/eureka-server:k8s-cf4aa68 ./eureka-server
-```
-
 Build Config Server with the fixed tag used by its Deployment:
 
 ```powershell
@@ -184,7 +184,7 @@ Build the core service images with the fixed tags used by their Deployments:
 
 ```powershell
 docker build -t ecommerce/api-gateway:k8s-26faf35 ./api-gateway
-docker build -t ecommerce/auth-service:k8s-26faf35 -f auth-service/Dockerfile .
+docker build -t ecommerce/auth-service:k8s-dns -f auth-service/Dockerfile .
 docker build -t ecommerce/customer-service:k8s-26faf35 -f customer-service/Dockerfile .
 ```
 
@@ -198,7 +198,7 @@ docker build -t ecommerce/product-service:k8s-a6454ba `
 Build the Saga service images with the fixed tags used by their Deployments:
 
 ```powershell
-docker build -t ecommerce/order-service:k8s-a91231c `
+docker build -t ecommerce/order-service:k8s-dns `
   -f order-service/Dockerfile .
 docker build -t ecommerce/inventory-service:k8s-a91231c `
   -f inventory-service/Dockerfile .
@@ -220,17 +220,16 @@ or rollout fails.
 1. Verify the Kubernetes context.
 2. Create the `ecommerce` namespace.
 3. Create required Secrets from local environment variables.
-4. Apply Eureka Server.
-5. Apply Config Server.
-6. Apply PostgreSQL and MongoDB.
-7. Restore verified backups and compare exact data/schema metadata.
-8. Apply Kafka.
-9. Create the six business topics.
-10. Apply API Gateway, Auth, Customer, Product, Inventory, Payment, and Order.
-11. Apply Prometheus and Grafana.
-12. Install the pinned Traefik Helm release.
-13. Apply the API Ingress.
-14. Run the complete acceptance suite.
+4. Apply Config Server.
+5. Apply PostgreSQL and MongoDB.
+6. Restore verified backups and compare exact data/schema metadata.
+7. Apply Kafka.
+8. Create the six business topics.
+9. Apply API Gateway, Auth, Customer, Product, Inventory, Payment, and Order.
+10. Apply Prometheus and Grafana.
+11. Install the pinned Traefik Helm release.
+12. Apply the API Ingress.
+13. Run the complete acceptance suite.
 
 First verify the context and create the namespace:
 
@@ -268,13 +267,9 @@ kubectl create secret generic ecommerce-secrets `
 applied without replacing its placeholders, and real values must never be
 committed.
 
-Apply Eureka and Config Server first:
+Apply Config Server first:
 
 ```powershell
-kubectl apply --dry-run=client -f k8s/apps/eureka-server/
-kubectl apply --dry-run=server -f k8s/apps/eureka-server/
-kubectl apply -f k8s/apps/eureka-server/
-kubectl rollout status deployment/eureka-server -n ecommerce
 kubectl apply --dry-run=client -f k8s/apps/config-server/
 kubectl apply --dry-run=server -f k8s/apps/config-server/
 kubectl apply -f k8s/apps/config-server/
@@ -352,20 +347,6 @@ outbox, idempotency, Kafka lag, monitoring, Ingress, and NodePort fallback
 acceptance checks.
 
 ## Test
-
-Forward the ClusterIP Service to the local machine:
-
-```powershell
-kubectl port-forward -n ecommerce service/eureka-server 8761:8761
-```
-
-While port-forward is running, open `http://localhost:8761` or check:
-
-```powershell
-curl.exe http://localhost:8761/actuator/health
-curl.exe http://localhost:8761/actuator/health/liveness
-curl.exe http://localhost:8761/actuator/health/readiness
-```
 
 Forward Config Server in a separate terminal:
 
@@ -517,7 +498,8 @@ volumes until the rollback window has been explicitly closed.
 
 ## Local environment notes
 
-- Eureka and Config Server are internal-only `ClusterIP` Services.
+- Config Server is an internal-only `ClusterIP` Service. Kubernetes does not
+  deploy Eureka.
 - PostgreSQL, MongoDB, and Kafka are internal-only Kubernetes Services backed
   by StatefulSets and PVCs.
 - API traffic enters through Traefik; Gateway NodePort `32323` remains a local
@@ -730,11 +712,11 @@ In Grafana, confirm that the provisioned `Prometheus` datasource uses UID
 dashboard is loaded. Its existing queries, including
 `ecommerce_orders_total` and
 `ecommerce_inventory_reservations_total`, must remain unchanged.
-The final local acceptance baseline is 10/10 Prometheus targets `UP`.
+The final local acceptance baseline is 9/9 Prometheus targets `UP`.
 
 The Prometheus configuration uses Kubernetes Service DNS names and
-`/actuator/prometheus` for Eureka, Config Server, Gateway, Auth, Customer,
-Product, Order, Inventory, and Payment. This ClusterIP scrape approach is
+`/actuator/prometheus` for Config Server, Gateway, Auth, Customer, Product,
+Order, Inventory, and Payment. This ClusterIP scrape approach is
 appropriate while every application has one replica. If a Service is scaled
 to multiple pods, scraping its ClusterIP does not guarantee that every pod
 instance is collected separately; migrate to Kubernetes service discovery or

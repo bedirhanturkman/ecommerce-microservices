@@ -24,15 +24,21 @@ public class AuthService {
     private final JwtService jwtService;
 
     public AuthService(
-            @Qualifier("loadBalancedRestClientBuilder") RestClient.Builder restClientBuilder,
+            RestClient.Builder restClientBuilder,
+            @Qualifier("loadBalancedRestClientBuilder") RestClient.Builder loadBalancedRestClientBuilder,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
-            @Value("${internal.api-key}") String internalApiKey
+            @Value("${internal.api-key}") String internalApiKey,
+            @Value("${service-discovery.mode:eureka}") String serviceDiscoveryMode,
+            @Value("${customer-service.base-url:http://customer-service}") String customerServiceBaseUrl
     ) {
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
-        this.restClient = restClientBuilder
-                .baseUrl("http://customer-service")
+        RestClient.Builder serviceRestClientBuilder = "dns".equalsIgnoreCase(serviceDiscoveryMode)
+                ? restClientBuilder
+                : loadBalancedRestClientBuilder;
+        this.restClient = serviceRestClientBuilder
+                .baseUrl(customerServiceBaseUrl)
                 .defaultHeader(
                         INTERNAL_API_KEY_HEADER,
                         requireInternalApiKey(internalApiKey)
