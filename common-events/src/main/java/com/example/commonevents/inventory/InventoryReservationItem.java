@@ -1,6 +1,6 @@
 package com.example.commonevents.inventory;
 
-public record ReservedInventoryItem(
+public record InventoryReservationItem(
         Long reservationId,
         String productId,
         Integer quantity,

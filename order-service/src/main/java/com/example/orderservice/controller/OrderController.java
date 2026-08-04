@@ -2,10 +2,12 @@ package com.example.orderservice.controller;
 
 import com.example.orderservice.dto.CreateOrderRequest;
 import com.example.orderservice.dto.OrderResponse;
+import com.example.orderservice.dto.OrderSagaResponse;
 import com.example.orderservice.security.OrderAccessContext;
 import com.example.orderservice.security.OrderAccessContextResolver;
 import com.example.orderservice.security.PermissionConstants;
 import com.example.orderservice.service.OrderService;
+import com.example.orderservice.saga.OrderSagaQueryService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -19,13 +21,16 @@ public class OrderController {
 
     private final OrderService orderService;
     private final OrderAccessContextResolver accessContextResolver;
+    private final OrderSagaQueryService sagaQueryService;
 
     public OrderController(
             OrderService orderService,
-            OrderAccessContextResolver accessContextResolver
+            OrderAccessContextResolver accessContextResolver,
+            OrderSagaQueryService sagaQueryService
     ) {
         this.orderService = orderService;
         this.accessContextResolver = accessContextResolver;
+        this.sagaQueryService = sagaQueryService;
     }
 
     @PostMapping
@@ -77,6 +82,17 @@ public class OrderController {
                 accessContextResolver.resolve(authentication);
 
         return orderService.findOrderById(id, accessContext);
+    }
+
+    @GetMapping("/{orderId}/saga")
+    @PreAuthorize(PermissionConstants.HAS_ROLE_USER_OR_ADMIN)
+    public OrderSagaResponse findSagaByOrderId(
+            @PathVariable Long orderId,
+            Authentication authentication
+    ) {
+        OrderAccessContext accessContext =
+                accessContextResolver.resolve(authentication);
+        return sagaQueryService.findByOrderId(orderId, accessContext);
     }
 
 }

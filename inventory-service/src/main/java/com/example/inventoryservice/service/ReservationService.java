@@ -1,6 +1,7 @@
 package com.example.inventoryservice.service;
 
 import com.example.commonevents.inventory.ReservedInventoryItem;
+import com.example.commonevents.inventory.InventoryReservationItem;
 import com.example.commonevents.order.OrderCreatedItemEvent;
 import com.example.inventoryservice.entity.Inventory;
 import com.example.inventoryservice.entity.InventoryReservation;
@@ -9,6 +10,7 @@ import com.example.inventoryservice.exception.*;
 import com.example.inventoryservice.repository.InventoryRepository;
 import com.example.inventoryservice.repository.InventoryReservationRepository;
 import com.example.inventoryservice.service.model.ReservationResult;
+import com.example.inventoryservice.service.model.ReservationStatusChangeResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -93,12 +95,6 @@ public class ReservationService {
             reservationsToCreate.add(reservation);
             inventoriesToUpdate.add(inventory);
 
-            reservedItems.add(
-                    new ReservedInventoryItem(
-                            productId,
-                            requestedQuantity
-                    )
-            );
         }
 
         try {
@@ -109,6 +105,19 @@ public class ReservationService {
             inventoryRepository.saveAllAndFlush(
                     inventoriesToUpdate
             );
+
+            for (InventoryReservation reservation
+                    : reservationsToCreate) {
+                reservedItems.add(
+                        new ReservedInventoryItem(
+                                reservation.getId(),
+                                reservation.getProductId(),
+                                reservation.getQuantity(),
+                                reservation.getStatus().name(),
+                                reservation.getVersion()
+                        )
+                );
+            }
 
         } catch (DataIntegrityViolationException exception) {
             throw new ReservationAlreadyExistsException(
@@ -124,7 +133,7 @@ public class ReservationService {
     }
 
     @Transactional
-    public boolean confirmReservation(
+    public ReservationStatusChangeResult confirmReservation(
             Long orderId
     ) {
         List<InventoryReservation> reservations =
@@ -143,7 +152,12 @@ public class ReservationService {
                 );
 
         if (currentStatus == ReservationStatus.CONFIRMED) {
-            return false;
+            return statusChangeResult(
+                    false,
+                    orderId,
+                    reservations,
+                    reservations.getFirst().getConfirmedAt()
+            );
         }
 
         if (currentStatus == ReservationStatus.RELEASED) {
@@ -221,11 +235,18 @@ public class ReservationService {
          * Transaction commit sırasında dirty checking ile
          * değişiklikler otomatik yazılır.
          */
-        return true;
+        reservationRepository.flush();
+
+        return statusChangeResult(
+                true,
+                orderId,
+                reservations,
+                confirmedAt
+        );
     }
 
     @Transactional
-    public boolean releaseReservation(
+    public ReservationStatusChangeResult releaseReservation(
             Long orderId
     ) {
         List<InventoryReservation> reservations =
@@ -244,7 +265,12 @@ public class ReservationService {
                 );
 
         if (currentStatus == ReservationStatus.RELEASED) {
-            return false;
+            return statusChangeResult(
+                    false,
+                    orderId,
+                    reservations,
+                    reservations.getFirst().getReleasedAt()
+            );
         }
 
         if (currentStatus == ReservationStatus.CONFIRMED) {
@@ -305,7 +331,38 @@ public class ReservationService {
             );
         }
 
-        return true;
+        reservationRepository.flush();
+
+        return statusChangeResult(
+                true,
+                orderId,
+                reservations,
+                releasedAt
+        );
+    }
+
+    private ReservationStatusChangeResult statusChangeResult(
+            boolean changed,
+            Long orderId,
+            List<InventoryReservation> reservations,
+            Instant occurredAt
+    ) {
+        List<InventoryReservationItem> items = reservations.stream()
+                .map(reservation -> new InventoryReservationItem(
+                        reservation.getId(),
+                        reservation.getProductId(),
+                        reservation.getQuantity(),
+                        reservation.getStatus().name(),
+                        reservation.getVersion()
+                ))
+                .toList();
+
+        return new ReservationStatusChangeResult(
+                changed,
+                orderId,
+                items,
+                occurredAt
+        );
     }
 
     private List<InventoryReservation> findActiveReservations(

@@ -34,6 +34,9 @@ order:
       payment-succeeded: ${PAYMENT_SUCCEEDED_TOPIC:payment-succeeded}
       payment-failed: ${PAYMENT_FAILED_TOPIC:payment-failed}
       inventory-reservation-failed: ${INVENTORY_RESERVATION_FAILED_TOPIC:inventory-reservation-failed}
+      inventory-reserved: ${INVENTORY_RESERVED_TOPIC:inventory-reserved}
+      inventory-reservation-confirmed: ${INVENTORY_RESERVATION_CONFIRMED_TOPIC:inventory-reservation-confirmed}
+      inventory-reservation-released: ${INVENTORY_RESERVATION_RELEASED_TOPIC:inventory-reservation-released}
 
     retry:
       interval-ms: ${ORDER_KAFKA_RETRY_INTERVAL_MS:2000}

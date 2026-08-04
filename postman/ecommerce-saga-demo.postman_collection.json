@@ -1,0 +1,43 @@
+{
+  "info": {
+    "name": "E-commerce Saga Demo",
+    "description": "Prepare fixtures with role tokens, create an order as USER, and poll the event-driven Order Saga read model. No credentials or tokens are stored.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost"},
+    {"key": "userToken", "value": ""},
+    {"key": "adminToken", "value": ""},
+    {"key": "sellerToken", "value": ""},
+    {"key": "email", "value": ""},
+    {"key": "password", "value": ""},
+    {"key": "productId", "value": ""},
+    {"key": "orderId", "value": ""},
+    {"key": "orderQuantity", "value": "1"}
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {"name": "Register USER", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"firstName\": \"Saga\",\n  \"lastName\": \"User\",\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"role\": \"USER\"\n}"}, "url": "{{baseUrl}}/api/v1/auth/register"}},
+        {"name": "Login USER", "event": [{"listen": "test", "script": {"exec": ["const json = pm.response.json();", "if (json.token) pm.collectionVariables.set('userToken', json.token);"]}}], "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"}, "url": "{{baseUrl}}/api/v1/auth/login"}}
+      ]
+    },
+    {
+      "name": "Fixture preparation",
+      "item": [
+        {"name": "Create Product", "event": [{"listen": "test", "script": {"exec": ["pm.test('created', () => pm.response.to.be.success);", "pm.collectionVariables.set('productId', pm.response.json().id);"]}}], "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{adminToken}}"}, {"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"name\": \"Saga demo product\",\n  \"description\": \"Use a unique name\",\n  \"price\": 100.00\n}"}, "url": "{{baseUrl}}/api/v1/products"}},
+        {"name": "Create Inventory", "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{adminToken}}"}, {"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 10\n}"}, "url": "{{baseUrl}}/api/v1/inventory"}}
+      ]
+    },
+    {
+      "name": "Saga scenarios",
+      "item": [
+        {"name": "Create Order", "event": [{"listen": "test", "script": {"exec": ["pm.test('order created', () => pm.response.to.be.success);", "pm.collectionVariables.set('orderId', pm.response.json().id);"]}}], "request": {"method": "POST", "header": [{"key": "Authorization", "value": "Bearer {{userToken}}"}, {"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\n  \"items\": [{\n    \"productId\": \"{{productId}}\",\n    \"quantity\": {{orderQuantity}}\n  }]\n}"}, "url": "{{baseUrl}}/api/v1/orders"}},
+        {"name": "Poll Order Saga", "event": [{"listen": "test", "script": {"exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "const saga = pm.response.json();", "pm.test('explicit Saga state', () => pm.expect(['PROCESSING','COMPLETED']).to.include(saga.sagaStatus));", "if (saga.sagaStatus === 'PROCESSING') console.log('Poll again: Saga is still processing');"]}}], "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{userToken}}"}], "url": "{{baseUrl}}/api/v1/orders/{{orderId}}/saga"}},
+        {"name": "ADMIN reads Order Saga", "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{adminToken}}"}], "url": "{{baseUrl}}/api/v1/orders/{{orderId}}/saga"}},
+        {"name": "SELLER is denied", "event": [{"listen": "test", "script": {"exec": ["pm.test('SELLER forbidden', () => pm.response.to.have.status(403));"]}}], "request": {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{sellerToken}}"}], "url": "{{baseUrl}}/api/v1/orders/{{orderId}}/saga"}}
+      ]
+    }
+  ]
+}

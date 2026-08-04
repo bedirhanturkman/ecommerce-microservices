@@ -1,6 +1,9 @@
 package com.example.orderservice.config;
 
 import com.example.commonevents.inventory.InventoryReservationFailedEvent;
+import com.example.commonevents.inventory.InventoryReservedEvent;
+import com.example.commonevents.inventory.InventoryReservationConfirmedEvent;
+import com.example.commonevents.inventory.InventoryReservationReleasedEvent;
 import com.example.commonevents.payment.PaymentFailedEvent;
 import com.example.commonevents.payment.PaymentSucceededEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -69,6 +72,26 @@ public class KafkaConsumerConfig {
     }
 
     @Bean
+    public ConsumerFactory<String, InventoryReservedEvent>
+    inventoryReservedConsumerFactory() {
+        return createConsumerFactory(InventoryReservedEvent.class, INVENTORY_PACKAGE);
+    }
+
+    @Bean
+    public ConsumerFactory<String, InventoryReservationConfirmedEvent>
+    inventoryConfirmedConsumerFactory() {
+        return createConsumerFactory(
+                InventoryReservationConfirmedEvent.class, INVENTORY_PACKAGE);
+    }
+
+    @Bean
+    public ConsumerFactory<String, InventoryReservationReleasedEvent>
+    inventoryReleasedConsumerFactory() {
+        return createConsumerFactory(
+                InventoryReservationReleasedEvent.class, INVENTORY_PACKAGE);
+    }
+
+    @Bean
     public ConcurrentKafkaListenerContainerFactory
             <String, PaymentSucceededEvent>
     paymentSucceededKafkaListenerContainerFactory(
@@ -128,6 +151,46 @@ public class KafkaConsumerConfig {
                 errorHandlerConfig.createErrorHandler()
         );
 
+        return factory;
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, InventoryReservedEvent>
+    inventoryReservedKafkaListenerContainerFactory(
+            OrderResultKafkaErrorHandlerConfig errorHandlerConfig
+    ) {
+        ConcurrentKafkaListenerContainerFactory<String, InventoryReservedEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(inventoryReservedConsumerFactory());
+        factory.setCommonErrorHandler(errorHandlerConfig.createErrorHandler());
+        return factory;
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory
+            <String, InventoryReservationConfirmedEvent>
+    inventoryConfirmedKafkaListenerContainerFactory(
+            OrderResultKafkaErrorHandlerConfig errorHandlerConfig
+    ) {
+        ConcurrentKafkaListenerContainerFactory
+                <String, InventoryReservationConfirmedEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(inventoryConfirmedConsumerFactory());
+        factory.setCommonErrorHandler(errorHandlerConfig.createErrorHandler());
+        return factory;
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory
+            <String, InventoryReservationReleasedEvent>
+    inventoryReleasedKafkaListenerContainerFactory(
+            OrderResultKafkaErrorHandlerConfig errorHandlerConfig
+    ) {
+        ConcurrentKafkaListenerContainerFactory
+                <String, InventoryReservationReleasedEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(inventoryReleasedConsumerFactory());
+        factory.setCommonErrorHandler(errorHandlerConfig.createErrorHandler());
         return factory;
     }
 

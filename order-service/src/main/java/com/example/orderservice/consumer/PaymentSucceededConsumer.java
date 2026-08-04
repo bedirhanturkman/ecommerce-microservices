@@ -8,6 +8,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.messaging.handler.annotation.Header;
+
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -26,7 +30,8 @@ public class PaymentSucceededConsumer {
                     "paymentSucceededKafkaListenerContainerFactory"
     )
     public void consume(
-            PaymentSucceededEvent event
+            PaymentSucceededEvent event,
+            @Header("outbox-event-id") byte[] eventId
     ) {
         log.info(
                 "PaymentSucceededEvent received by Order Service. "
@@ -39,7 +44,9 @@ public class PaymentSucceededConsumer {
         validator.validate(event);
 
         boolean updated =
-                processingService.markAsPaid(event);
+                processingService.markAsPaid(
+                        UUID.fromString(new String(eventId, StandardCharsets.UTF_8)),
+                        event);
 
         if (!updated) {
             log.info(

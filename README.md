@@ -2,6 +2,8 @@
 
 A Spring Boot based e-commerce backend built with a Microservice Architecture.
 
+Saga query model and Postman usage: [Order Saga read model](docs/SAGA-READ-MODEL.md).
+
 ## Architecture
 
 - API Gateway

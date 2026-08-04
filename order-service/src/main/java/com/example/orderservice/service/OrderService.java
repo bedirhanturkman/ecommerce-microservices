@@ -16,6 +16,7 @@ import com.example.orderservice.metrics.OrderMetrics;
 import com.example.orderservice.outbox.OrderOutboxService;
 import com.example.orderservice.repository.OrderRepository;
 import com.example.orderservice.security.OrderAccessContext;
+import com.example.orderservice.saga.OrderSagaProjectionService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ public class OrderService {
     private final OrderEventMapper orderEventMapper;
     private final OrderOutboxService orderOutboxService;
     private final OrderMetrics orderMetrics;
+    private final OrderSagaProjectionService sagaProjectionService;
 
     public OrderService(
             OrderRepository orderRepository,
@@ -42,7 +44,8 @@ public class OrderService {
             ProductClient productClient,
             OrderEventMapper orderEventMapper,
             OrderOutboxService orderOutboxService,
-            OrderMetrics orderMetrics
+            OrderMetrics orderMetrics,
+            OrderSagaProjectionService sagaProjectionService
     ) {
         this.orderRepository = orderRepository;
         this.orderMapper = orderMapper;
@@ -51,6 +54,7 @@ public class OrderService {
         this.orderOutboxService =
                 orderOutboxService;
         this.orderMetrics = orderMetrics;
+        this.sagaProjectionService = sagaProjectionService;
     }
 
     @Transactional
@@ -121,6 +125,8 @@ public class OrderService {
 
         Order savedOrder =
                 orderRepository.save(order);
+
+        sagaProjectionService.initialize(savedOrder.getId());
 
         OrderCreatedEvent orderCreatedEvent =
                 orderEventMapper
