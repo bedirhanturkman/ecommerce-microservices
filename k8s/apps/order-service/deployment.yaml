@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: order-service
-          image: ecommerce/order-service:k8s-dns
+          image: ecommerce/order-service:saga-read-model-v1
           imagePullPolicy: IfNotPresent
           env:
             - name: SPRING_CONFIG_IMPORT

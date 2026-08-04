@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: inventory-service
-          image: ecommerce/inventory-service:k8s-a91231c
+          image: ecommerce/inventory-service:saga-read-model-v1
           imagePullPolicy: IfNotPresent
           env:
             - name: SPRING_CONFIG_IMPORT

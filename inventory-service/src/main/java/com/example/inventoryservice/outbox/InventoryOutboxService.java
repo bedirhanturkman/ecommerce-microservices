@@ -2,6 +2,8 @@ package com.example.inventoryservice.outbox;
 
 import com.example.commonevents.inventory.InventoryReservationFailedEvent;
 import com.example.commonevents.inventory.InventoryReservedEvent;
+import com.example.commonevents.inventory.InventoryReservationConfirmedEvent;
+import com.example.commonevents.inventory.InventoryReservationReleasedEvent;
 import com.example.inventoryservice.exception.InventoryOutboxSerializationException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +28,8 @@ public class InventoryOutboxService {
 
     private final String inventoryReservedTopic;
     private final String inventoryReservationFailedTopic;
+    private final String inventoryReservationConfirmedTopic;
+    private final String inventoryReservationReleasedTopic;
 
     public InventoryOutboxService(
             InventoryOutboxEventRepository
@@ -37,7 +41,13 @@ public class InventoryOutboxService {
             String inventoryReservedTopic,
 
             @Value("${inventory.kafka.topics.reservation-failed}")
-            String inventoryReservationFailedTopic
+            String inventoryReservationFailedTopic,
+
+            @Value("${inventory.kafka.topics.reservation-confirmed}")
+            String inventoryReservationConfirmedTopic,
+
+            @Value("${inventory.kafka.topics.reservation-released}")
+            String inventoryReservationReleasedTopic
     ) {
         this.outboxEventRepository =
                 outboxEventRepository;
@@ -49,6 +59,10 @@ public class InventoryOutboxService {
 
         this.inventoryReservationFailedTopic =
                 inventoryReservationFailedTopic;
+        this.inventoryReservationConfirmedTopic =
+                inventoryReservationConfirmedTopic;
+        this.inventoryReservationReleasedTopic =
+                inventoryReservationReleasedTopic;
     }
 
     @Transactional(
@@ -75,6 +89,22 @@ public class InventoryOutboxService {
                 event,
                 inventoryReservationFailedTopic
         );
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean saveInventoryReservationConfirmedEvent(
+            InventoryReservationConfirmedEvent event
+    ) {
+        return saveEvent(event.orderId(), event,
+                inventoryReservationConfirmedTopic);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean saveInventoryReservationReleasedEvent(
+            InventoryReservationReleasedEvent event
+    ) {
+        return saveEvent(event.orderId(), event,
+                inventoryReservationReleasedTopic);
     }
 
     private boolean saveEvent(

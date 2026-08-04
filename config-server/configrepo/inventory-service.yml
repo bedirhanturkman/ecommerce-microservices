@@ -36,6 +36,8 @@ inventory:
       order-created: ${ORDER_CREATED_TOPIC:order-created}
       reserved: ${INVENTORY_RESERVED_TOPIC:inventory-reserved}
       reservation-failed: ${INVENTORY_RESERVATION_FAILED_TOPIC:inventory-reservation-failed}
+      reservation-confirmed: ${INVENTORY_RESERVATION_CONFIRMED_TOPIC:inventory-reservation-confirmed}
+      reservation-released: ${INVENTORY_RESERVATION_RELEASED_TOPIC:inventory-reservation-released}
       payment-succeeded: ${PAYMENT_SUCCEEDED_TOPIC:payment-succeeded}
       payment-failed: ${PAYMENT_FAILED_TOPIC:payment-failed}
 

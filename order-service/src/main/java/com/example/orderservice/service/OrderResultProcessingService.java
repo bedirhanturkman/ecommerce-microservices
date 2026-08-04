@@ -9,6 +9,7 @@ import com.example.orderservice.exception.OrderNotFoundException;
 import com.example.orderservice.exception.OrderResultMismatchException;
 import com.example.orderservice.exception.OrderStateConflictException;
 import com.example.orderservice.repository.OrderRepository;
+import com.example.orderservice.saga.OrderSagaProjectionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,9 +19,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderResultProcessingService {
 
     private final OrderRepository orderRepository;
+    private final OrderSagaProjectionService sagaProjectionService;
 
     @Transactional
     public boolean markAsPaid(
+            java.util.UUID eventId,
             PaymentSucceededEvent event
     ) {
         Order order =
@@ -34,14 +37,18 @@ public class OrderResultProcessingService {
                 event.amount()
         );
 
-        return transition(
+        boolean updated = transition(
                 order,
                 OrderStatus.PAID
         );
+        sagaProjectionService.applyPaymentSucceeded(
+                eventId, event, order.getStatus());
+        return updated;
     }
 
     @Transactional
     public boolean markAsPaymentFailed(
+            java.util.UUID eventId,
             PaymentFailedEvent event
     ) {
         Order order =
@@ -55,14 +62,18 @@ public class OrderResultProcessingService {
                 event.amount()
         );
 
-        return transition(
+        boolean updated = transition(
                 order,
                 OrderStatus.PAYMENT_FAILED
         );
+        sagaProjectionService.applyPaymentFailed(
+                eventId, event, order.getStatus());
+        return updated;
     }
 
     @Transactional
     public boolean markAsInventoryFailed(
+            java.util.UUID eventId,
             InventoryReservationFailedEvent event
     ) {
         Order order =
@@ -70,10 +81,13 @@ public class OrderResultProcessingService {
                         event.orderId()
                 );
 
-        return transition(
+        boolean updated = transition(
                 order,
                 OrderStatus.INVENTORY_FAILED
         );
+        sagaProjectionService.applyInventoryFailed(
+                eventId, event, order.getStatus());
+        return updated;
     }
 
     private Order findOrderForUpdate(
